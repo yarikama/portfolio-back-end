@@ -6,9 +6,9 @@ from core.config import INPUT_EXAMPLE
 from fastapi import APIRouter, HTTPException
 from fastapi.concurrency import run_in_threadpool
 from loguru import logger
-from db import SessionLocal
-from models.log import RequestLog
-from models.prediction import (
+from db.session import SessionLocal
+from db.models.log import RequestLog
+from schemas.prediction import (
     HealthResponse,
     MachineLearningDataInput,
     MachineLearningResponse,

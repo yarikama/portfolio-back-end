@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, Text
 
-from db import Base
+from db.session import Base
 
 
 class RequestLog(Base):
