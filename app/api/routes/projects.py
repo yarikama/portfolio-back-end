@@ -1,13 +1,11 @@
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Path
-from sqlalchemy.orm import Session
-
 from db.dependency import get_db
 from db.models.projects import Project
-from schemas.projects import ProjectResponse, ProjectCreate, ProjectUpdate
-
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from schemas.projects import ProjectCreate, ProjectResponse, ProjectUpdate
+from sqlalchemy.orm import Session
 
 router = APIRouter()
 

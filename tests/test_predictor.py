@@ -2,7 +2,6 @@ import json
 import sys
 from pathlib import Path
 
-import pytest
 from fastapi.testclient import TestClient
 
 sys.path.append(str(Path(__file__).resolve().parents[1] / "app"))
@@ -10,12 +9,17 @@ sys.path.append(str(Path(__file__).resolve().parents[1] / "app"))
 from api.routes import predictor
 from main import app
 
-
 client = TestClient(app)
 
 
 def sample_input():
-    example_path = Path(__file__).resolve().parents[1] / "ml" / "model" / "examples" / "example.json"
+    example_path = (
+        Path(__file__).resolve().parents[1]
+        / "ml"
+        / "model"
+        / "examples"
+        / "example.json"
+    )
     return json.loads(example_path.read_text())
 
 
@@ -31,7 +35,13 @@ def test_health_endpoint(monkeypatch):
     monkeypatch.setattr(
         predictor,
         "INPUT_EXAMPLE",
-        str(Path(__file__).resolve().parents[1] / "ml" / "model" / "examples" / "example.json"),
+        str(
+            Path(__file__).resolve().parents[1]
+            / "ml"
+            / "model"
+            / "examples"
+            / "example.json"
+        ),
     )
     response = client.get("/api/v1/health")
     assert response.status_code == 200

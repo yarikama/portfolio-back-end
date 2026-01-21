@@ -3,23 +3,23 @@ from pathlib import Path
 
 import joblib
 from core.config import INPUT_EXAMPLE
+from db.models.log import RequestLog
+from db.session import SessionLocal
 from fastapi import APIRouter, HTTPException
 from fastapi.concurrency import run_in_threadpool
 from loguru import logger
-from db.session import SessionLocal
-from db.models.log import RequestLog
 from schemas.prediction import (
     HealthResponse,
     MachineLearningDataInput,
     MachineLearningResponse,
 )
-from services.predict import MachineLearningModelHandlerScore as model
+from services.predict import MachineLearningModelHandlerScore as MLModel
 
 router = APIRouter()
 
 
 def get_prediction(data_point):
-    return model.predict(data_point, load_wrapper=joblib.load, method="predict")
+    return MLModel.predict(data_point, load_wrapper=joblib.load, method="predict")
 
 
 def get_prediction_label(prediction):
@@ -79,4 +79,4 @@ async def health():
         await run_in_threadpool(get_prediction, test_point)
         return HealthResponse(status=True)
     except Exception:
-        raise HTTPException(status_code=404, detail="Unhealthy")
+        raise HTTPException(status_code=404, detail="Unhealthy") from None

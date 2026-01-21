@@ -1,13 +1,15 @@
-from typing import Optional
-from enum import Enum
 from datetime import datetime
+from enum import Enum
+from typing import Optional
 from uuid import UUID
 
 from schemas.base import BaseSchema
 
+
 class ProjectCategory(str, Enum):
     ENGINEERING = "engineering"
     ML = "ml"
+
 
 class ProjectBase(BaseSchema):
     slug: str
@@ -23,9 +25,11 @@ class ProjectBase(BaseSchema):
     featured: bool
     order: int
     published: bool
-    
+
+
 class ProjectCreate(ProjectBase):
     pass
+
 
 class ProjectUpdate(BaseSchema):
     slug: Optional[str] = None
@@ -41,6 +45,7 @@ class ProjectUpdate(BaseSchema):
     featured: Optional[bool] = None
     order: Optional[int] = None
     published: Optional[bool] = None
+
 
 class ProjectResponse(ProjectBase):
     id: UUID

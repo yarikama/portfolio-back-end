@@ -1,25 +1,25 @@
 import json
 
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-
 from api.routes import predictor
 from db import Base
 from models.log import RequestLog
 from models.prediction import MachineLearningDataInput
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
 
 @pytest.fixture
 def anyio_backend():
     return "asyncio"
 
+
 @pytest.mark.anyio
 async def test_predict_logs_request_response(monkeypatch):
     engine = create_engine("sqlite:///:memory:")
-    TestingSessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+    testing_session_local = sessionmaker(bind=engine, autocommit=False, autoflush=False)
     Base.metadata.create_all(bind=engine)
-    monkeypatch.setattr(predictor, "SessionLocal", TestingSessionLocal)
+    monkeypatch.setattr(predictor, "SessionLocal", testing_session_local)
     monkeypatch.setattr(predictor, "get_prediction", lambda data: [1])
 
     payload = {
@@ -34,7 +34,7 @@ async def test_predict_logs_request_response(monkeypatch):
     response = await predictor.predict(data)
     assert response.prediction == 1.0
 
-    db = TestingSessionLocal()
+    db = testing_session_local()
     logs = db.query(RequestLog).all()
     assert len(logs) == 1
     log = logs[0]

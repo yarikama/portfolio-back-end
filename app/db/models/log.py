@@ -1,6 +1,5 @@
-from sqlalchemy import Column, Integer, Text
-
 from db.session import Base
+from sqlalchemy import Column, Integer, Text
 
 
 class RequestLog(Base):

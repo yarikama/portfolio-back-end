@@ -24,29 +24,36 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=7.2",
-    "black>=24.3",
-    "autopep8>=2.0.0",
+    "ruff>=0.4.0",
     "ipdb>=0.13.0",
-    "pylint>=3.0.0"
 ]
 aws = [
     "mangum>=0.17.0"
 ]
 
-[tool.black]
+[tool.ruff]
 line-length = 88
-target-version = ['py39', 'py310', 'py311']
-include = '\.pyi?$'
-exclude = '''
-/(
-  \.toml
-  |\.sh
-  |\.git
-  |\.ini
-  |Dockerfile
-  |Jenkinfile
-)/
-'''
+target-version = "py39"
+exclude = [".venv", "__pycache__", ".git", "alembic"]
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes
+    "I",      # isort
+    "N",      # pep8-naming
+    "UP",     # pyupgrade
+    "B",      # flake8-bugbear
+    "SIM",    # flake8-simplify
+]
+ignore = [
+    "B008",   # Depends() in default arguments is standard FastAPI pattern
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
 
 [build-system]
 requires = ["setuptools", "wheel"]
