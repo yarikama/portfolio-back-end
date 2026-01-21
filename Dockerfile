@@ -1,21 +1,38 @@
-FROM python:3.11.0
+# Base Stage:
+FROM python:3.11-slim AS base
 
-ENV PYTHONUNBUFFERED 1
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    UV_SYSTEM_PYTHON=1 \
+    PYTHONPATH="/app"
 
 WORKDIR /app
 
-COPY pyproject.toml ./
-RUN pip install --upgrade pip && \
-    pip install uv && \
-    uv pip install -e .  # Installs dependencies using uv
+COPY pyproject.toml uv.lock ./
 
-ARG DEV=false
-RUN if [ "$DEV" = "true" ] ; then uv pip install -e .[dev] ; fi
+# Development Stage: include dev dependencies + hot reload
+FROM base AS dev
 
-COPY ./app/ ./
-COPY ./ml/model/ ./ml/model/
+# Install all dependencies to system Python (without creating .venv)
+# This way volume mount won't overwrite installed packages
+RUN uv pip install --no-cache -e ".[dev]"
 
-ENV PYTHONPATH "${PYTHONPATH}:/app"
+COPY . .
 
-EXPOSE 8080
+# Development use: uvicorn with --reload
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--reload"]
+
+# Production Stage: minimal, only necessary things
+FROM base AS production
+
+ENV UV_COMPILE_BYTECODE=1
+
+# Install only production dependencies
+RUN uv sync --frozen --no-dev --no-install-project
+
+COPY ./app ./
+COPY ./ml/model ./ml/model
+
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]

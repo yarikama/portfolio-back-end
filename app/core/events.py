@@ -6,7 +6,7 @@ from loguru import logger
 from sqlalchemy.exc import OperationalError
 
 from core.config import MEMOIZATION_FLAG
-from db import Base, engine
+from db.session import Base, engine
 
 
 def preload_model():

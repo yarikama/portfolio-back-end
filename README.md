@@ -1,132 +1,132 @@
-# Portfolio-Back-End
+# Portfolio Backend
 
-Yarikama's Portfolio With Blogs
+Yarikama's Portfolio Backend API - Built with FastAPI
 
-## Development Requirements
+## Tech Stack
 
-- Python 3.11+
-- Uv (Python Package Manager)
+- **Framework**: FastAPI
+- **Database**: PostgreSQL
+- **ORM**: SQLAlchemy
+- **Migration**: Alembic
+- **Package Manager**: uv
 
-### M.L Model Environment
+## Quick Start
 
-```sh
-MODEL_PATH=./ml/model/
-MODEL_NAME=model.pkl
+### Prerequisites
+
+- Docker & Docker Compose
+- uv (Python package manager)
+
+### Development Setup
+
+```bash
+# 1. Clone and enter the project
+cd portfolio-back-end
+
+# 2. Copy environment variables
+cp .env.example .env
+
+# 3. Start development environment
+docker compose up --build
+
+# 4. Run database migrations (in another terminal)
+docker compose exec app alembic upgrade head
 ```
 
-### Update `/predict`
+The API will be available at: http://localhost:8080
 
-To update your machine learning model, add your `load` and `method` [change here](app/api/routes/predictor.py#L19) at `predictor.py`
+## Development Commands
 
-## Installation
+### Docker
 
-```sh
-python -m venv venv
-source venv/bin/activate
-make install
+```bash
+# Start development environment
+docker compose up
+
+# Start with rebuild (after adding new dependencies)
+docker compose up --build
+
+# Stop all containers
+docker compose down
+
+# View logs
+docker compose logs -f app
+
+# Enter the app container
+docker compose exec app bash
 ```
 
-## Runnning Localhost
+### Database Migrations (Alembic)
 
-`make run`
+```bash
+# Run all pending migrations
+docker compose exec app alembic upgrade head
 
-## Deploy app
+# Create a new migration (after modifying models)
+docker compose exec app alembic revision --autogenerate -m "description of changes"
 
-`make deploy`
+# Rollback one migration
+docker compose exec app alembic downgrade -1
 
-## Running Tests
+# View current migration version
+docker compose exec app alembic current
 
-`make test`
+# View migration history
+docker compose exec app alembic history
+```
 
-## Access Swagger Documentation
+### Dependencies
 
-> <http://localhost:8080/docs>
+```bash
+# Add a new dependency
+uv add <package-name>
 
-## Access Redocs Documentation
+# Add a dev dependency
+uv add --dev <package-name>
 
-> <http://localhost:8080/redoc>
+# Update lock file
+uv lock
 
-## Project structure
+# After updating dependencies, rebuild the container
+docker compose up --build
+```
 
-Files related to application are in the `app` or `tests` directories.
-Application parts are:
+## API Documentation
 
-    app
-    |
-    | # Fast-API stuff
-    ├── api                 - web related stuff.
-    │   └── routes          - web routes.
-    ├── core                - application configuration, startup events, logging.
-    ├── models              - pydantic models for this application.
-    ├── services            - logic that is not just crud related.
-    ├── main-aws-lambda.py  - [Optional] FastAPI application for AWS Lambda creation and configuration.
-    └── main.py             - FastAPI application creation and configuration.
-    |
-    | # ML stuff
-    ├── data             - where you persist data locally
-    │   ├── interim      - intermediate data that has been transformed.
-    │   ├── processed    - the final, canonical data sets for modeling.
-    │   └── raw          - the original, immutable data dump.
-    │
-    ├── notebooks        - Jupyter notebooks. Naming convention is a number (for ordering),
-    |
-    ├── ml               - modelling source code for use in this project.
-    │   ├── __init__.py  - makes ml a Python module
-    │   ├── pipeline.py  - scripts to orchestrate the whole pipeline
-    │   │
-    │   ├── data         - scripts to download or generate data
-    │   │   └── make_dataset.py
-    │   │
-    │   ├── features     - scripts to turn raw data into features for modeling
-    │   │   └── build_features.py
-    │   │
-    │   └── model        - scripts to train models and make predictions
-    │       ├── predict_model.py
-    │       └── train_model.py
-    │
-    └── tests            - pytest
+- **Swagger UI**: http://localhost:8080/docs
+- **ReDoc**: http://localhost:8080/redoc
 
-## GCP
+## Project Structure
 
-Deploying inference service to Cloud Run
+```
+app/
+├── api/
+│   └── routes/          # API endpoints
+├── core/                # Config, logging, error handling
+├── schemas/             # Pydantic models (API validation)
+├── db/
+│   ├── session.py       # Database connection
+│   └── models/          # SQLAlchemy ORM models
+├── services/            # Business logic
+├── alembic/
+│   └── versions/        # Migration files
+└── main.py              # FastAPI application entry
+```
 
-### Authenticate
+## Environment Variables
 
-1. Install `gcloud` cli
-2. `gcloud auth login`
-3. `gcloud config set project <PROJECT_ID>`
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `DATABASE_URL` | PostgreSQL connection string | - |
+| `SECRET_KEY` | JWT secret key | - |
+| `DEBUG` | Enable debug mode | `False` |
 
-### Enable APIs
+## Production Deployment
 
-1. Cloud Run API
-2. Cloud Build API
-3. IAM API
+```bash
+# Build production image
+docker build --target production -t portfolio-backend:prod .
 
-### Deploy to Cloud Run
-
-1. Run `gcp-deploy.sh`
-
-### Clean up
-
-1. Delete Cloud Run
-2. Delete Docker image in GCR
-
-## AWS
-
-Deploying inference service to AWS Lambda
-
-### Authenticate
-
-1. Install `awscli` and `sam-cli`
-2. `aws configure`
-
-### Deploy to Lambda
-
-1. Run `sam build`
-2. Run `sam deploy --guiChange this portion for other types of models
-
-## Add the correct type hinting when completed
-
-`aws cloudformation delete-stack --stack-name <STACK_NAME_ON_CREATION>`
-
-Made by <https://github.com/arthurhenrique/cookiecutter-fastapi/graphs/contributors> with ❤️
+# Run production container
+docker run -p 8080:8080 --env-file .env.production portfolio-backend:prod
+```
