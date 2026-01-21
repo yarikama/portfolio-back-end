@@ -1,6 +1,7 @@
 from typing import Optional
 from uuid import UUID
 
+from api.dependencies import CurrentAdmin
 from db.dependency import get_db
 from db.models.projects import Project
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
@@ -56,6 +57,7 @@ async def get_project(
 @router.post("/projects", status_code=201)
 async def create_project(
     project_in: ProjectCreate,
+    _admin: CurrentAdmin,
     db: Session = Depends(get_db),
 ):
     is_exists = db.query(Project).filter(Project.slug == project_in.slug).first()
@@ -73,6 +75,7 @@ async def create_project(
 async def update_project(
     id: UUID,
     project_in: ProjectUpdate,
+    _admin: CurrentAdmin,
     db: Session = Depends(get_db),
 ):
     db_project = db.query(Project).filter(Project.id == id).first()
@@ -90,6 +93,7 @@ async def update_project(
 @router.delete("/projects/{id}", status_code=204)
 async def delete_project(
     id: UUID,
+    _admin: CurrentAdmin,
     db: Session = Depends(get_db),
 ):
     project = db.query(Project).filter(Project.id == id).first()
