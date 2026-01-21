@@ -3,7 +3,6 @@ import json
 import pytest
 from api.routes import predictor
 from db.models.log import RequestLog
-from db.session import Base
 from schemas.prediction import MachineLearningDataInput
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -18,7 +17,8 @@ def anyio_backend():
 async def test_predict_logs_request_response(monkeypatch):
     engine = create_engine("sqlite:///:memory:")
     testing_session_local = sessionmaker(bind=engine, autocommit=False, autoflush=False)
-    Base.metadata.create_all(bind=engine)
+    # Only create RequestLog table (avoid PostgreSQL-specific ARRAY in projects)
+    RequestLog.__table__.create(bind=engine)
     monkeypatch.setattr(predictor, "SessionLocal", testing_session_local)
     monkeypatch.setattr(predictor, "get_prediction", lambda data: [1])
 
