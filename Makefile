@@ -25,7 +25,7 @@ install: generate_dot_env
 	uv sync --all-extras
 
 test:
-	uv run pytest tests -vv --show-capture=all
+	uv run pytest -vv --show-capture=all
 
 run:
 	PYTHONPATH=app/ uv run uvicorn main:app --reload --host 0.0.0.0 --port 8080
