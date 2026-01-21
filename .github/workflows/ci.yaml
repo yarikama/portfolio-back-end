@@ -10,7 +10,7 @@ jobs:
       - uses: astral-sh/setup-uv@v4
       - name: Lint
         run: |
-          uv sync --dev
+          uv sync --extra dev
           uv run ruff check .
           uv run ruff format --check .
 
@@ -25,6 +25,6 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies
-        run: uv sync --dev
+        run: uv sync --extra dev
       - name: Test
         run: uv run pytest tests -v
