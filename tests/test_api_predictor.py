@@ -1,7 +1,6 @@
 import json
 
 import api.routes.predictor as predictor
-import main as app_main
 import pytest
 from core import config as app_config
 from fastapi.testclient import TestClient
@@ -11,7 +10,6 @@ from main import get_application
 @pytest.fixture
 def client(monkeypatch):
     monkeypatch.setattr(app_config, "MEMOIZATION_FLAG", False)
-    monkeypatch.setattr(app_main, "MEMOIZATION_FLAG", False)
     app = get_application()
     return TestClient(app)
 
