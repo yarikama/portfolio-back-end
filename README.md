@@ -30,20 +30,20 @@ Swagger: http://localhost:8080/docs
 ## Development
 
 ```bash
-make deploy     # 啟動開發環境
-make logs       # 查看 logs
-make shell      # 進入容器
-make rebuild    # 重建 image（新增依賴後）
-make down       # 停止容器
+make deploy     # Start dev environment
+make logs       # View logs
+make shell      # Enter container
+make rebuild    # Rebuild image (after adding dependencies)
+make down       # Stop containers
 ```
 
 ### Database Migrations
 
 ```bash
-# 在容器內執行 (make shell)
-alembic upgrade head                              # 執行 migration
-alembic revision --autogenerate -m "description"  # 建立 migration
-alembic downgrade -1                              # 回滾一版
+# Run inside container (make shell)
+alembic upgrade head                              # Run migrations
+alembic revision --autogenerate -m "description"  # Create migration
+alembic downgrade -1                              # Rollback one version
 ```
 
 ## Project Structure

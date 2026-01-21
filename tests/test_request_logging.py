@@ -2,9 +2,9 @@ import json
 
 import pytest
 from api.routes import predictor
-from db import Base
-from models.log import RequestLog
-from models.prediction import MachineLearningDataInput
+from db.models.log import RequestLog
+from db.session import Base
+from schemas.prediction import MachineLearningDataInput
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
