@@ -13,26 +13,16 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# ============================================================
-# 重要：從環境變數讀取 DATABASE_URL
-# ============================================================
 database_url = os.getenv("DATABASE_URL")
 if database_url:
     config.set_main_option("sqlalchemy.url", database_url)
 
-# ============================================================
-# 重要：import 你的 models，讓 Alembic 可以自動偵測變更
-# ============================================================
 from db.session import Base
-
-# import 所有 models（這樣 Base.metadata 才會包含它們）
 from db.models.projects import Project
 from db.models.log import RequestLog
 
-# 告訴 Alembic 用這個 metadata 來比對 schema
 target_metadata = Base.metadata
 
-# ============================================================
 
 
 def run_migrations_offline() -> None:
