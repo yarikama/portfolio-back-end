@@ -93,3 +93,6 @@ target/
 
 # Claude
 .claude/
+
+# Docs
+API_SPECIFICATION.md
