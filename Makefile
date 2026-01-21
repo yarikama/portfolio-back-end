@@ -17,22 +17,29 @@ endif
 
 # Target section and Global definitions
 # -----------------------------------------------------------------------------
-.PHONY: all clean test install run deploy down
+.PHONY: all clean test install run deploy down lint format hash logs shell rebuild
 
-all: clean test install run deploy down
+all: clean install test
 
-venv:
-	uv venv .venv
+install: generate_dot_env
+	uv sync --all-extras
 
-test: install
-	uv run pytest tests -vv --show-capture=all
+test:
+	uv run pytest -vv --show-capture=all
 
-install: generate_dot_env venv
-	pip install uv --break-system-packages
-	uv pip install -e ".[dev]"
-
-run: venv
+run:
 	PYTHONPATH=app/ uv run uvicorn main:app --reload --host 0.0.0.0 --port 8080
+
+lint:
+	uv run ruff check app/
+
+format:
+	uv run ruff format app/
+	uv run ruff check --fix app/
+
+hash:
+	@read -p "Enter password: " pwd && \
+	uv run python -c "from passlib.context import CryptContext; print(CryptContext(schemes=['bcrypt']).hash('$$pwd'))"
 
 deploy: generate_dot_env
 	docker-compose build
@@ -40,6 +47,16 @@ deploy: generate_dot_env
 
 down:
 	docker-compose down
+
+logs:
+	docker-compose logs -f app
+
+shell:
+	docker-compose exec app bash
+
+rebuild:
+	docker-compose build --no-cache
+	docker-compose up -d
 
 generate_dot_env:
 	@if [[ ! -e .env ]]; then \

@@ -12,121 +12,73 @@ Yarikama's Portfolio Backend API - Built with FastAPI
 
 ## Quick Start
 
-### Prerequisites
-
-- Docker & Docker Compose
-- uv (Python package manager)
-
-### Development Setup
-
 ```bash
-# 1. Clone and enter the project
-cd portfolio-back-end
-
-# 2. Copy environment variables
+# 1. Copy environment variables
 cp .env.example .env
 
-# 3. Start development environment
-docker compose up --build
+# 2. Start development environment
+make deploy
 
-# 4. Run database migrations (in another terminal)
-docker compose exec app alembic upgrade head
+# 3. Run database migrations
+make shell
+alembic upgrade head
 ```
 
-The API will be available at: http://localhost:8080
+API: http://localhost:8080
+Swagger: http://localhost:8080/docs
 
-## Development Commands
-
-### Docker
+## Development
 
 ```bash
-# Start development environment
-docker compose up
-
-# Start with rebuild (after adding new dependencies)
-docker compose up --build
-
-# Stop all containers
-docker compose down
-
-# View logs
-docker compose logs -f app
-
-# Enter the app container
-docker compose exec app bash
+make deploy     # 啟動開發環境
+make logs       # 查看 logs
+make shell      # 進入容器
+make rebuild    # 重建 image（新增依賴後）
+make down       # 停止容器
 ```
 
-### Database Migrations (Alembic)
+### Database Migrations
 
 ```bash
-# Run all pending migrations
-docker compose exec app alembic upgrade head
-
-# Create a new migration (after modifying models)
-docker compose exec app alembic revision --autogenerate -m "description of changes"
-
-# Rollback one migration
-docker compose exec app alembic downgrade -1
-
-# View current migration version
-docker compose exec app alembic current
-
-# View migration history
-docker compose exec app alembic history
+# 在容器內執行 (make shell)
+alembic upgrade head                              # 執行 migration
+alembic revision --autogenerate -m "description"  # 建立 migration
+alembic downgrade -1                              # 回滾一版
 ```
-
-### Dependencies
-
-```bash
-# Add a new dependency
-uv add <package-name>
-
-# Add a dev dependency
-uv add --dev <package-name>
-
-# Update lock file
-uv lock
-
-# After updating dependencies, rebuild the container
-docker compose up --build
-```
-
-## API Documentation
-
-- **Swagger UI**: http://localhost:8080/docs
-- **ReDoc**: http://localhost:8080/redoc
 
 ## Project Structure
 
 ```
 app/
 ├── api/
+│   ├── dependencies/    # Auth, etc.
 │   └── routes/          # API endpoints
-├── core/                # Config, logging, error handling
-├── schemas/             # Pydantic models (API validation)
+├── core/                # Config, security
+├── schemas/             # Pydantic models
 ├── db/
 │   ├── session.py       # Database connection
-│   └── models/          # SQLAlchemy ORM models
-├── services/            # Business logic
-├── alembic/
-│   └── versions/        # Migration files
-└── main.py              # FastAPI application entry
+│   └── models/          # SQLAlchemy models
+└── main.py              # Application entry
 ```
 
 ## Environment Variables
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `DATABASE_URL` | PostgreSQL connection string | - |
-| `SECRET_KEY` | JWT secret key | - |
-| `DEBUG` | Enable debug mode | `False` |
+| Variable | Description |
+|----------|-------------|
+| `DATABASE_URL` | PostgreSQL connection string |
+| `SECRET_KEY` | JWT signing key |
+| `ADMIN_USERNAME` | Admin login username |
+| `ADMIN_PASSWORD_HASH` | Bcrypt hashed password |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | Token expiry (default: 30) |
 
-## Production Deployment
+Generate password hash:
+```bash
+make hash
+```
+
+## Production
 
 ```bash
-# Build production image
 docker build --target production -t portfolio-backend:prod .
-
-# Run production container
 docker run -p 8080:8080 --env-file .env.production portfolio-backend:prod
 ```
