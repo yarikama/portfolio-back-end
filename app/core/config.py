@@ -19,6 +19,13 @@ DATABASE_URL: str = config("DATABASE_URL", default="sqlite:///./app.db")
 
 PROJECT_NAME: str = config("PROJECT_NAME", default="Portfolio-Back-End")
 
+# Auth configuration
+ADMIN_USERNAME: str = config("ADMIN_USERNAME", default="admin")
+ADMIN_PASSWORD_HASH: str = config("ADMIN_PASSWORD_HASH", default="")
+ACCESS_TOKEN_EXPIRE_MINUTES: int = config(
+    "ACCESS_TOKEN_EXPIRE_MINUTES", cast=int, default=30
+)
+
 # logging configuration
 LOGGING_LEVEL = logging.DEBUG if DEBUG else logging.INFO
 logging.basicConfig(
