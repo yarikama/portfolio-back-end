@@ -1,12 +1,11 @@
 import os
 
+from core.config import MODEL_NAME, MODEL_PATH
+from core.errors import ModelLoadException, PredictException
 from loguru import logger
 
-from core.errors import PredictException, ModelLoadException
-from core.config import MODEL_NAME, MODEL_PATH
 
-
-class MachineLearningModelHandlerScore(object):
+class MachineLearningModelHandlerScore:
     model = None
 
     @classmethod

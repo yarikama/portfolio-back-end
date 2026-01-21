@@ -1,7 +1,5 @@
+from api.routes import predictor, projects
 from fastapi import APIRouter
-
-from api.routes import predictor
-from api.routes import projects
 
 router = APIRouter()
 router.include_router(predictor.router, tags=["predictor"], prefix="/v1")

@@ -1,9 +1,6 @@
-# -*- coding: utf-8 -*-
 import click
-from pathlib import Path
-
-from loguru import logger
 from dotenv import find_dotenv, load_dotenv
+from loguru import logger
 
 
 def pipeline():
@@ -21,7 +18,6 @@ def main(input_filepath, output_filepath):
 
 
 if __name__ == "__main__":
-
     load_dotenv(find_dotenv())
 
     # pylint: disable = no-value-for-paramete

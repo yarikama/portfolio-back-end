@@ -1,12 +1,11 @@
 from typing import Callable
 
 import joblib
+from core.config import MEMOIZATION_FLAG
+from db.session import Base, engine
 from fastapi import FastAPI
 from loguru import logger
 from sqlalchemy.exc import OperationalError
-
-from core.config import MEMOIZATION_FLAG
-from db.session import Base, engine
 
 
 def preload_model():

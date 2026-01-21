@@ -1,11 +1,11 @@
 import json
-import pytest
-from fastapi.testclient import TestClient
 
-from main import get_application
 import api.routes.predictor as predictor
-from core import config as app_config
 import main as app_main
+import pytest
+from core import config as app_config
+from fastapi.testclient import TestClient
+from main import get_application
 
 
 @pytest.fixture

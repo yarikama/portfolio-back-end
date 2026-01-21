@@ -1,10 +1,10 @@
-from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime
-from sqlalchemy.dialects.postgresql import UUID, ARRAY
-from db.session import Base
-
 import uuid
 
+from db.session import Base
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text
+from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.sql import func
+
 
 class Project(Base):
     __tablename__ = "projects"
@@ -25,4 +25,3 @@ class Project(Base):
     published = Column(Boolean, default=True)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
-    

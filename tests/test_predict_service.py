@@ -1,7 +1,6 @@
 import os
 
 import pytest
-
 import services.predict as predict
 
 
@@ -22,7 +21,10 @@ def test_predict_success(monkeypatch):
 
 
 def test_predict_missing_method(monkeypatch):
-    predict.MachineLearningModelHandlerScore.model = {"model": object(), "scaler": DummyScaler()}
+    predict.MachineLearningModelHandlerScore.model = {
+        "model": object(),
+        "scaler": DummyScaler(),
+    }
     with pytest.raises(predict.PredictException):
         predict.MachineLearningModelHandlerScore.predict([[1]])
 
