@@ -6,7 +6,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 
 
-class Contact(Base):
+class ContactMessage(Base):
     __tablename__ = "contact_messages"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
