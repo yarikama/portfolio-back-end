@@ -45,5 +45,6 @@ class LabNoteListResponse(BaseSchema):
     tags: list[str]
     read_time: Optional[str] = None
     date: datetime.date
+    published: bool
     created_at: datetime.datetime
     updated_at: datetime.datetime
