@@ -84,3 +84,4 @@ async def delete_contact(
 
     db.delete(db_contact)
     db.commit()
+    return None
