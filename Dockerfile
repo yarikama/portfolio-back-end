@@ -29,8 +29,8 @@ FROM base AS production
 
 ENV UV_COMPILE_BYTECODE=1
 
-# Install only production dependencies
-RUN uv sync --frozen --no-dev --no-install-project
+# Install only production dependencies to system Python
+RUN uv pip install --no-cache .
 
 COPY ./app ./
 COPY ./ml/model ./ml/model

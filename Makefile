@@ -15,9 +15,15 @@ ifeq ($(MODEL_NAME),)
 MODEL_NAME := model.pkl
 endif
 
+# GCP Cloud Run configuration
+GCP_PROJECT := yarikama-portfolio
+GCP_REGION := us-central1
+GCP_SERVICE := portfolio-backend
+CLOUDSDK_PYTHON := /opt/homebrew/opt/python@3.12/bin/python3.12
+
 # Target section and Global definitions
 # -----------------------------------------------------------------------------
-.PHONY: all clean test install run deploy down lint format hash logs shell rebuild
+.PHONY: all clean test install run deploy deploy-gcp down lint format hash logs shell rebuild
 
 all: clean install test
 
@@ -44,6 +50,28 @@ hash:
 deploy: generate_dot_env
 	docker-compose build
 	docker-compose up -d
+
+deploy-gcp: generate_dot_env
+	@echo "Deploying to GCP Cloud Run..."
+	@export $$(grep -v '^#' .env | xargs) && \
+	CLOUDSDK_PYTHON=$(CLOUDSDK_PYTHON) gcloud run deploy $(GCP_SERVICE) \
+		--source . \
+		--platform managed \
+		--region $(GCP_REGION) \
+		--allow-unauthenticated \
+		--port 8080 \
+		--memory 512Mi \
+		--cpu 1 \
+		--min-instances 0 \
+		--max-instances 1 \
+		--project $(GCP_PROJECT) \
+		--set-env-vars "DATABASE_URL=$$DATABASE_URL" \
+		--set-env-vars "SECRET_KEY=$$SECRET_KEY" \
+		--set-env-vars "DEBUG=False" \
+		--set-env-vars "MEMOIZATION_FLAG=False" \
+		--quiet
+	@echo "Deployment complete!"
+	@echo "Service URL: https://$(GCP_SERVICE)-790579792548.$(GCP_REGION).run.app"
 
 down:
 	docker-compose down
