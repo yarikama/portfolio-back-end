@@ -2,6 +2,7 @@ from typing import Optional
 from uuid import UUID
 
 from api.dependencies import CurrentAdmin
+from core.paginator import offset_pagination
 from db.dependency import get_db
 from db.models.projects import Project
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
@@ -34,12 +35,7 @@ async def get_projects(
 
     return {
         "data": [ProjectResponse.model_validate(p) for p in projects],
-        "pagination": {
-            "total": total,
-            "limit": limit,
-            "offset": offset,
-            "hasMore": offset + limit < total,
-        },
+        "pagination": offset_pagination(offset, limit, total),
     }
 
 
