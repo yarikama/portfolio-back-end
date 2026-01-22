@@ -5,11 +5,10 @@ services:
       target: dev
     ports:
       - "8080:8080"
-    env_file:
-      - .env
     volumes:
       - ./app:/app/
       - ./ml/model:/app/ml/model/
+      - ./.env:/app/.env:ro
     depends_on:
       - db
 
