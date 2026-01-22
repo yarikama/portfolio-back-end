@@ -53,14 +53,14 @@ hash:
 	echo "Add this to .env file (no $$ escaping needed):" && \
 	echo "ADMIN_PASSWORD_HASH=$$hash" && \
 	echo "" && \
-	read -p "Update .env automatically? (y/n): " update && \
+	read -p "Update .env.local automatically? (y/n): " update && \
 	if [ "$$update" = "y" ]; then \
-		if grep -q "^ADMIN_PASSWORD_HASH=" .env 2>/dev/null; then \
-			sed -i.bak "s|^ADMIN_PASSWORD_HASH=.*|ADMIN_PASSWORD_HASH=$$hash|" .env && \
-			echo "✓ Updated ADMIN_PASSWORD_HASH in .env"; \
+		if grep -q "^ADMIN_PASSWORD_HASH=" .env.local 2>/dev/null; then \
+			sed -i.bak "s|^ADMIN_PASSWORD_HASH=.*|ADMIN_PASSWORD_HASH=$$hash|" .env.local && \
+			echo "✓ Updated ADMIN_PASSWORD_HASH in .env.local"; \
 		else \
-			echo "ADMIN_PASSWORD_HASH=$$hash" >> .env && \
-			echo "✓ Added ADMIN_PASSWORD_HASH to .env"; \
+			echo "ADMIN_PASSWORD_HASH=$$hash" >> .env.local && \
+			echo "✓ Added ADMIN_PASSWORD_HASH to .env.local"; \
 		fi; \
 	fi
 
@@ -70,7 +70,7 @@ deploy: generate_dot_env
 
 deploy-gcp: generate_dot_env
 	@echo "Deploying to GCP Cloud Run..."
-	@export $$(grep -v '^#' .env | xargs) && \
+	@export $$(grep -v '^#' .env.local | xargs) && \
 	CLOUDSDK_PYTHON=$(CLOUDSDK_PYTHON) $(GCLOUD) run deploy $(GCP_SERVICE) \
 		--source . \
 		--platform managed \
@@ -106,8 +106,8 @@ rebuild:
 	docker-compose up -d
 
 generate_dot_env:
-	@if [[ ! -e .env ]]; then \
-		cp .env.example .env; \
+	@if [[ ! -e .env.local ]]; then \
+		cp .env.example .env.local; \
 	fi
 
 clean:
