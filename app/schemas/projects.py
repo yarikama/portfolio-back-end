@@ -51,3 +51,12 @@ class ProjectResponse(ProjectBase):
     id: UUID
     created_at: datetime
     updated_at: datetime
+
+
+class ProjectReorderItem(BaseSchema):
+    id: UUID
+    order: int
+
+
+class ProjectReorderRequest(BaseSchema):
+    orders: list[ProjectReorderItem]

@@ -6,7 +6,13 @@ from core.paginator import offset_pagination
 from db.dependency import get_db
 from db.models.projects import Project
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
-from schemas.projects import ProjectCreate, ProjectResponse, ProjectUpdate
+from schemas.projects import (
+    ProjectCreate,
+    ProjectReorderRequest,
+    ProjectResponse,
+    ProjectUpdate,
+)
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 router = APIRouter()
@@ -18,10 +24,10 @@ async def get_projects(
     category: Optional[str] = Query(None),
     featured: Optional[bool] = Query(None),
     tag: Optional[str] = Query(None),
-    limit: int = Query(10, ge=1, le=100),
+    limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ):
-    query = db.query(Project)
+    query = db.query(Project).filter(Project.published)
 
     if category:
         query = query.filter(Project.category == category)
@@ -36,6 +42,52 @@ async def get_projects(
     return {
         "data": [ProjectResponse.model_validate(p) for p in projects],
         "pagination": offset_pagination(offset, limit, total),
+    }
+
+
+@router.get("/projects/categories")
+async def get_project_categories(
+    db: Session = Depends(get_db),
+):
+    total = db.query(Project.category).filter(Project.published).count()
+
+    category_counts = (
+        db.query(Project.category, func.count(Project.id).label("count"))
+        .filter(Project.published)
+        .group_by(Project.category)
+        .all()
+    )
+
+    categories = [{"id": "all", "label": "All", "count": total}]
+
+    label_map = {
+        "engineering": "Engineering",
+        "ml": "ML/AI",
+    }
+
+    categories += [
+        {"id": category, "label": label_map.get(category, category), "count": count}
+        for category, count in category_counts
+    ]
+    return {"data": categories}
+
+
+@router.patch("/projects/reorder")
+async def reorder_projects(
+    request: ProjectReorderRequest,
+    _admin: CurrentAdmin,
+    db: Session = Depends(get_db),
+):
+    updated_count = 0
+    for item in request.orders:
+        updated_count += (
+            db.query(Project)
+            .filter(Project.id == item.id)
+            .update({"order": item.order})
+        )
+    db.commit()
+    return {
+        "data": {"message": "Projects reordered successfully", "updated": updated_count}
     }
 
 
