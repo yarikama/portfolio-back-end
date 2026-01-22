@@ -20,6 +20,8 @@ if database_url:
 from db.session import Base
 from db.models.projects import Project
 from db.models.log import RequestLog
+from db.models.lab_notes import LabNote
+from db.models.contact import ContactMessage
 
 target_metadata = Base.metadata
 
