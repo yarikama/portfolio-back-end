@@ -22,6 +22,9 @@ GCP_SERVICE := portfolio-backend
 CLOUDSDK_PYTHON := /opt/homebrew/opt/python@3.12/bin/python3.12
 GCLOUD := /opt/homebrew/share/google-cloud-sdk/bin/gcloud
 
+ENV ?= local
+ENV_FILE := .env.${ENV}
+
 # Target section and Global definitions
 # -----------------------------------------------------------------------------
 .PHONY: all clean test install run deploy deploy-gcp down lint format hash logs shell rebuild
@@ -65,12 +68,14 @@ hash:
 	fi
 
 deploy: generate_dot_env
-	docker-compose build
-	docker-compose up -d
+	@echo "Running in ${ENV} environment..."
+	docker-compose --env-file ${ENV_FILE} build
+	docker-compose --env-file ${ENV_FILE} up -d
 
 deploy-gcp: generate_dot_env
-	@echo "Deploying to GCP Cloud Run..."
-	@export $$(grep -v '^#' .env.local | xargs) && \
+	@if [ ! -f .env.prod ]; then echo "Error: .env.prod not found!"; exit 1; fi
+	@echo "Deploying to GCP Cloud Run using .env.prod..."
+	@export $$(grep -v '^#' .env.prod | xargs) && \
 	CLOUDSDK_PYTHON=$(CLOUDSDK_PYTHON) $(GCLOUD) run deploy $(GCP_SERVICE) \
 		--source . \
 		--platform managed \
@@ -108,6 +113,11 @@ rebuild:
 generate_dot_env:
 	@if [[ ! -e .env.local ]]; then \
 		cp .env.example .env.local; \
+		echo "Created .env.local (Modify for Docker)"; \
+	fi
+	@if [[ ! -e .env.prod ]]; then \
+		cp .env.example .env.prod; \
+		echo "Created .env.prod (Modify for GCP/Neon)"; \
 	fi
 
 clean:
@@ -122,3 +132,21 @@ clean:
 	rm -rf htmlcov
 	rm -rf .tox/
 	rm -rf docs/_build
+
+# Database Migrations
+# -----------------------------------------------------------------------------
+
+revision:
+	docker-compose exec app alembic revision --autogenerate -m "$(msg)"
+
+upgrade:
+	docker-compose exec app alembic upgrade head
+
+downgrade:
+	docker-compose exec app alembic downgrade -1
+
+history:
+	docker-compose exec app alembic history --verbose
+
+stamp:
+	docker-compose exec app alembic stamp head
