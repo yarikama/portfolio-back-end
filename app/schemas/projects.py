@@ -1,14 +1,10 @@
 from datetime import datetime
-from enum import Enum
 from typing import Optional
 from uuid import UUID
 
+from pydantic import Field
 from schemas.base import BaseSchema
-
-
-class ProjectCategory(str, Enum):
-    ENGINEERING = "engineering"
-    ML = "ml"
+from schemas.category import CategoryResponse
 
 
 class ProjectBase(BaseSchema):
@@ -16,7 +12,6 @@ class ProjectBase(BaseSchema):
     title: str
     description: str
     tags: list[str]
-    category: ProjectCategory
     year: str
     link: Optional[str] = None
     github: Optional[str] = None
@@ -28,7 +23,7 @@ class ProjectBase(BaseSchema):
 
 
 class ProjectCreate(ProjectBase):
-    pass
+    category_id: UUID = Field(..., description="Category UUID")
 
 
 class ProjectUpdate(BaseSchema):
@@ -36,7 +31,7 @@ class ProjectUpdate(BaseSchema):
     title: Optional[str] = None
     description: Optional[str] = None
     tags: Optional[list[str]] = None
-    category: Optional[ProjectCategory] = None
+    category_id: Optional[UUID] = Field(None, description="Category UUID")
     year: Optional[str] = None
     link: Optional[str] = None
     github: Optional[str] = None
@@ -49,8 +44,21 @@ class ProjectUpdate(BaseSchema):
 
 class ProjectResponse(ProjectBase):
     id: UUID
+    category: CategoryResponse = Field(..., description="Full category object")
     created_at: datetime
     updated_at: datetime
+
+    @classmethod
+    def model_validate(cls, obj, **kwargs):
+        """Custom validation to handle category relationship."""
+        if hasattr(obj, "category_rel"):
+            # Create a dict with category_rel mapped to category
+            data = {
+                **{k: v for k, v in obj.__dict__.items() if not k.startswith("_")},
+                "category": obj.category_rel,
+            }
+            return super().model_validate(data, **kwargs)
+        return super().model_validate(obj, **kwargs)
 
 
 class ProjectReorderItem(BaseSchema):

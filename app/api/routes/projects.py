@@ -4,6 +4,7 @@ from uuid import UUID
 from api.dependencies import CurrentAdmin
 from core.paginator import offset_pagination
 from db.dependency import get_db
+from db.models.category import Category
 from db.models.projects import Project
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from schemas.projects import (
@@ -12,8 +13,7 @@ from schemas.projects import (
     ProjectResponse,
     ProjectUpdate,
 )
-from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 router = APIRouter()
 
@@ -26,17 +26,17 @@ router = APIRouter()
 async def get_all_projects_admin(
     _admin: CurrentAdmin,
     db: Session = Depends(get_db),
-    category: Optional[str] = Query(None),
+    category_id: Optional[UUID] = Query(None, description="Filter by category UUID"),
     featured: Optional[bool] = Query(None),
     tag: Optional[str] = Query(None),
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ):
     """Admin endpoint: Get all projects including unpublished."""
-    query = db.query(Project)
+    query = db.query(Project).options(joinedload(Project.category_rel))
 
-    if category:
-        query = query.filter(Project.category == category)
+    if category_id:
+        query = query.filter(Project.category_id == category_id)
     if featured is not None:
         query = query.filter(Project.featured == featured)
     if tag:
@@ -51,6 +51,24 @@ async def get_all_projects_admin(
     }
 
 
+@router.get("/admin/projects/{id}")
+async def get_project_by_id(
+    id: UUID,
+    _admin: CurrentAdmin,
+    db: Session = Depends(get_db),
+):
+    """Admin endpoint: Get a single project by ID (including unpublished)."""
+    project = (
+        db.query(Project)
+        .options(joinedload(Project.category_rel))
+        .filter(Project.id == id)
+        .first()
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return {"data": ProjectResponse.model_validate(project)}
+
+
 @router.post("/admin/projects", status_code=201)
 async def create_project(
     project_in: ProjectCreate,
@@ -58,6 +76,7 @@ async def create_project(
     db: Session = Depends(get_db),
 ):
     """Admin endpoint: Create a new project."""
+    # Check if slug already exists
     is_exists = db.query(Project).filter(Project.slug == project_in.slug).first()
     if is_exists:
         raise HTTPException(
@@ -65,10 +84,26 @@ async def create_project(
             detail=f"Project with slug '{project_in.slug}' already exists",
         )
 
+    # Validate category exists
+    category = db.query(Category).filter(Category.id == project_in.category_id).first()
+    if not category:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Category with id '{project_in.category_id}' not found",
+        )
+
     project = Project(**project_in.model_dump())
     db.add(project)
     db.commit()
     db.refresh(project)
+
+    # Reload with relationship
+    project = (
+        db.query(Project)
+        .options(joinedload(Project.category_rel))
+        .filter(Project.id == project.id)
+        .first()
+    )
     return {"data": ProjectResponse.model_validate(project)}
 
 
@@ -99,11 +134,29 @@ async def update_project(
                 detail=f"Project with slug '{update_data['slug']}' already exists",
             )
 
+    # Validate category if being updated
+    if "category_id" in update_data:
+        category = (
+            db.query(Category).filter(Category.id == update_data["category_id"]).first()
+        )
+        if not category:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Category with id '{update_data['category_id']}' not found",
+            )
+
     for field, value in update_data.items():
         setattr(db_project, field, value)
 
     db.commit()
-    db.refresh(db_project)
+
+    # Reload with relationship
+    db_project = (
+        db.query(Project)
+        .options(joinedload(Project.category_rel))
+        .filter(Project.id == id)
+        .first()
+    )
     return {"data": ProjectResponse.model_validate(db_project)}
 
 
@@ -150,17 +203,21 @@ async def reorder_projects(
 @router.get("/projects")
 async def get_projects(
     db: Session = Depends(get_db),
-    category: Optional[str] = Query(None),
+    category_id: Optional[UUID] = Query(None, description="Filter by category UUID"),
     featured: Optional[bool] = Query(None),
     tag: Optional[str] = Query(None),
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ):
     """Public endpoint: Get only published projects."""
-    query = db.query(Project).filter(Project.published)
+    query = (
+        db.query(Project)
+        .options(joinedload(Project.category_rel))
+        .filter(Project.published)
+    )
 
-    if category:
-        query = query.filter(Project.category == category)
+    if category_id:
+        query = query.filter(Project.category_id == category_id)
     if featured is not None:
         query = query.filter(Project.featured == featured)
     if tag:
@@ -175,41 +232,18 @@ async def get_projects(
     }
 
 
-@router.get("/projects/categories")
-async def get_project_categories(
-    db: Session = Depends(get_db),
-):
-    """Public endpoint: Get project categories with counts."""
-    total = db.query(Project.category).filter(Project.published).count()
-
-    category_counts = (
-        db.query(Project.category, func.count(Project.id).label("count"))
-        .filter(Project.published)
-        .group_by(Project.category)
-        .all()
-    )
-
-    categories = [{"id": "all", "label": "All", "count": total}]
-
-    label_map = {
-        "engineering": "Engineering",
-        "ml": "ML/AI",
-    }
-
-    categories += [
-        {"id": category, "label": label_map.get(category, category), "count": count}
-        for category, count in category_counts
-    ]
-    return {"data": categories}
-
-
 @router.get("/projects/{slug}")
 async def get_project(
     slug: str = Path(..., min_length=1, max_length=255),
     db: Session = Depends(get_db),
 ):
     """Public endpoint: Get a single project by slug."""
-    project = db.query(Project).filter(Project.slug == slug).first()
+    project = (
+        db.query(Project)
+        .options(joinedload(Project.category_rel))
+        .filter(Project.slug == slug)
+        .first()
+    )
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     return {"data": ProjectResponse.model_validate(project)}

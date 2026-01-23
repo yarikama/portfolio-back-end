@@ -1,8 +1,9 @@
 import uuid
 
 from db.session import Base
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import ARRAY, UUID
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 
@@ -14,7 +15,16 @@ class Project(Base):
     title = Column(String(255), nullable=False)
     description = Column(Text, nullable=False)
     tags = Column(ARRAY(String), nullable=False)
-    category = Column(String(50), nullable=False)
+
+    # Foreign key to categories table
+    category_id = Column(
+        UUID(as_uuid=True), ForeignKey("categories.id"), nullable=False
+    )
+
+    # Legacy field - kept for backward compatibility during migration
+    # Can be removed after migration is complete
+    category = Column(String(50), nullable=True)
+
     year = Column(String(20), nullable=False)
     link = Column(String(500), nullable=True)
     github = Column(String(500), nullable=True)
@@ -25,3 +35,6 @@ class Project(Base):
     published = Column(Boolean, default=True)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    # Relationship
+    category_rel = relationship("Category", back_populates="projects")

@@ -2,7 +2,6 @@ import services.predict as predict
 from core import events
 from fastapi import FastAPI
 from main import get_application
-from sqlalchemy.exc import OperationalError
 
 
 def test_preload_model(monkeypatch):
@@ -27,11 +26,7 @@ def test_create_start_app_handler(monkeypatch):
         called["called"] = True
 
     monkeypatch.setattr(events, "preload_model", fake_preload)
-
-    def fake_create_all(*args, **kwargs):
-        raise OperationalError("stmt", {}, Exception("db down"))
-
-    monkeypatch.setattr(events.Base.metadata, "create_all", fake_create_all)
+    monkeypatch.setattr(events, "MEMOIZATION_FLAG", True)
 
     app = FastAPI()
     handler = events.create_start_app_handler(app)
