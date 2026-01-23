@@ -45,6 +45,19 @@ async def get_all_lab_notes_admin(
     }
 
 
+@router.get("/admin/lab-notes/{id}")
+async def get_lab_note_by_id(
+    id: UUID,
+    _admin: CurrentAdmin,
+    db: Session = Depends(get_db),
+):
+    """Admin endpoint: Get a single lab note by ID (including unpublished)."""
+    lab_note = db.query(LabNote).filter(LabNote.id == id).first()
+    if not lab_note:
+        raise HTTPException(status_code=404, detail="Lab note not found")
+    return {"data": LabNoteResponse.model_validate(lab_note)}
+
+
 @router.post("/admin/lab-notes", status_code=201)
 async def create_lab_note(
     lab_note: LabNoteCreate,
