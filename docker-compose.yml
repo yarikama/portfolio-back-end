@@ -11,8 +11,6 @@ services:
       - ./.env.local:/app/.env:ro
     depends_on:
       - db
-    env_file:
-      - ${ENV_FILE:-.env.local}
 
   db:
     image: postgres:16

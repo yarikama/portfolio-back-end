@@ -69,8 +69,8 @@ hash:
 
 deploy: generate_dot_env
 	@echo "Running in ${ENV} environment..."
-	docker-compose --env-file ${ENV_FILE} build
-	docker-compose --env-file ${ENV_FILE} up -d
+	ENV_FILE=$(ENV_FILE) docker-compose build
+	ENV_FILE=$(ENV_FILE) docker-compose up -d
 
 deploy-gcp: generate_dot_env
 	@if [ ! -f .env.prod ]; then echo "Error: .env.prod not found!"; exit 1; fi
