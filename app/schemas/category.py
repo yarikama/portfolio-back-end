@@ -25,9 +25,7 @@ class CategoryBase(BaseModel):
     description: Optional[str] = Field(
         None, description="Optional description of the category"
     )
-    order: int = Field(
-        0, ge=0, description="Display order (lower number = higher priority)"
-    )
+    order: int = Field(0, description="Display order (lower number = higher priority)")
 
 
 class CategoryCreate(CategoryBase):
@@ -42,7 +40,7 @@ class CategoryUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=50)
     label: Optional[str] = Field(None, min_length=1, max_length=100)
     description: Optional[str] = None
-    order: Optional[int] = Field(None, ge=0)
+    order: Optional[int] = None
 
 
 class CategoryResponse(CategoryBase):
