@@ -13,6 +13,7 @@ class ProjectBase(BaseSchema):
     description: str
     tags: list[str]
     year: str
+    cover_image: Optional[str] = None
     link: Optional[str] = None
     github: Optional[str] = None
     metrics: Optional[str] = None
@@ -33,6 +34,7 @@ class ProjectUpdate(BaseSchema):
     tags: Optional[list[str]] = None
     category_id: Optional[UUID] = Field(None, description="Category UUID")
     year: Optional[str] = None
+    cover_image: Optional[str] = None
     link: Optional[str] = None
     github: Optional[str] = None
     metrics: Optional[str] = None

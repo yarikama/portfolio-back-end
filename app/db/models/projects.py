@@ -26,6 +26,7 @@ class Project(Base):
     category = Column(String(50), nullable=True)
 
     year = Column(String(20), nullable=False)
+    cover_image = Column(String(500), nullable=True)
     link = Column(String(500), nullable=True)
     github = Column(String(500), nullable=True)
     metrics = Column(Text, nullable=True)

@@ -36,3 +36,10 @@ logger.configure(handlers=[{"sink": sys.stderr, "level": LOGGING_LEVEL}])
 MODEL_PATH = config("MODEL_PATH", default="./ml/model/")
 MODEL_NAME = config("MODEL_NAME", default="model.pkl")
 INPUT_EXAMPLE = config("INPUT_EXAMPLE", default="./ml/model/examples/example.json")
+
+# R2 Storage configuration
+R2_ACCOUNT_ID: str = config("R2_ACCOUNT_ID", default="")
+R2_ACCESS_KEY_ID: str = config("R2_ACCESS_KEY_ID", default="")
+R2_SECRET_ACCESS_KEY: str = config("R2_SECRET_ACCESS_KEY", default="")
+R2_BUCKET_NAME: str = config("R2_BUCKET_NAME", default="yarikama-portfolio-backend")
+R2_PUBLIC_URL: str = config("R2_PUBLIC_URL", default="")

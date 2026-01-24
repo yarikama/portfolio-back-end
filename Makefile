@@ -93,6 +93,11 @@ deploy-gcp: generate_dot_env
 		--set-env-vars "MEMOIZATION_FLAG=False" \
 		--set-env-vars "ADMIN_USERNAME=$$ADMIN_USERNAME" \
 		--set-env-vars "ADMIN_PASSWORD_HASH=$$ADMIN_PASSWORD_HASH" \
+		--set-env-vars "R2_ACCOUNT_ID=$$R2_ACCOUNT_ID" \
+		--set-env-vars "R2_ACCESS_KEY_ID=$$R2_ACCESS_KEY_ID" \
+		--set-env-vars "R2_SECRET_ACCESS_KEY=$$R2_SECRET_ACCESS_KEY" \
+		--set-env-vars "R2_BUCKET_NAME=$$R2_BUCKET_NAME" \
+		--set-env-vars "R2_PUBLIC_URL=$$R2_PUBLIC_URL" \
 		--quiet
 	@echo "Deployment complete!"
 	@echo "Service URL: https://$(GCP_SERVICE)-790579792548.$(GCP_REGION).run.app"
