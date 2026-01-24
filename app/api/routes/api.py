@@ -1,4 +1,12 @@
-from api.routes import auth, categories, contact, lab_notes, predictor, projects
+from api.routes import (
+    auth,
+    categories,
+    contact,
+    lab_notes,
+    predictor,
+    projects,
+    upload,
+)
 from fastapi import APIRouter
 
 router = APIRouter()
@@ -8,3 +16,4 @@ router.include_router(categories.router, tags=["categories"], prefix="/v1")
 router.include_router(projects.router, tags=["projects"], prefix="/v1")
 router.include_router(lab_notes.router, tags=["lab-notes"], prefix="/v1")
 router.include_router(contact.router, tags=["contact"], prefix="/v1")
+router.include_router(upload.router, tags=["upload"], prefix="/v1")
