@@ -17,7 +17,8 @@ FROM base AS dev
 
 # Install all dependencies to system Python (without creating .venv)
 # This way volume mount won't overwrite installed packages
-RUN uv pip install --no-cache -e ".[dev]"
+RUN uv export --locked --extra dev --no-emit-project -o /tmp/requirements.txt \
+    && uv pip install --no-cache -r /tmp/requirements.txt
 
 COPY . .
 
@@ -30,7 +31,8 @@ FROM base AS production
 ENV UV_COMPILE_BYTECODE=1
 
 # Install only production dependencies to system Python
-RUN uv pip install --no-cache .
+RUN uv export --locked --no-emit-project -o /tmp/requirements.txt \
+    && uv pip install --no-cache -r /tmp/requirements.txt
 
 COPY ./app ./
 COPY ./ml/model ./ml/model
