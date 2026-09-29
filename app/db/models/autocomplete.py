@@ -1,7 +1,7 @@
 import uuid
 
 from db.session import Base
-from sqlalchemy import Column, DateTime, Integer, String, Text
+from sqlalchemy import Column, DateTime, Float, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.sql import func
 
@@ -29,7 +29,11 @@ class AutocompleteSuggestion(Base):
     completion = Column(Text, nullable=False)
     suggestion = Column(Text, nullable=False)
     # [[token, logprob], ...] for the completion, to revisit the cut-off.
+    # Since generation stops at the first unsure token, this ends with that
+    # token (or a sentence end), not after 16 tokens.
     tokens = Column(JSONB, nullable=True)
+    # The confidence cut-off in force when it was shown, to compare settings.
+    min_token_prob = Column(Float, nullable=True)
     latency_ms = Column(Integer, nullable=False)
     # accepted | rejected | ignored; null until the editor reports back.
     outcome = Column(String(16), nullable=True, index=True)

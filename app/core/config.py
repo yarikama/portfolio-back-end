@@ -53,8 +53,10 @@ AUTOCOMPLETE_MODEL_VERSION: str = config(
     "AUTOCOMPLETE_MODEL_VERSION", default="unknown"
 )
 # A suggestion keeps tokens while each one's probability stays at or above
-# this. 0.5 showed a suggestion about half the time, and about half of those
-# were exactly what was written next (homelab docs/10-autocomplete-plan.md).
+# this. In the bake-off 0.5 showed a suggestion about half the time, and about
+# half of those were exactly what was written next; lower shows more and
+# longer suggestions that are right less often (homelab
+# docs/10-autocomplete-plan.md). Recorded with every suggestion.
 AUTOCOMPLETE_MIN_TOKEN_PROB: float = config(
     "AUTOCOMPLETE_MIN_TOKEN_PROB", cast=float, default=0.5
 )
