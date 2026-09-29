@@ -1,3 +1,5 @@
+import asyncio
+import json
 import math
 import os
 
@@ -118,7 +120,7 @@ def client(session_factory, monkeypatch):
 
 
 def fake_model(monkeypatch, tokens=None, error=None):
-    async def complete(prompt):
+    async def complete(prompt, min_prob):
         if error:
             raise error
         return Completion(
@@ -148,6 +150,7 @@ def test_a_confident_completion_is_shown_and_recorded(
         assert row.suggestion == "was his"
         assert row.model_version == VERSION
         assert row.latency_ms == 42
+        assert row.min_token_prob == 0.5
         assert row.outcome is None
 
 
@@ -221,3 +224,87 @@ def test_autocomplete_needs_the_admin_token():
         401,
         403,
     )
+
+
+# ── streaming from the model ─────────────────────────────────────────────────
+
+
+def sse(tokens, done=True):
+    """A vLLM-style completions stream: one token and its logprob per event."""
+    events = [
+        "data: "
+        + json.dumps(
+            {
+                "choices": [
+                    {
+                        "text": token,
+                        "logprobs": {"tokens": [token], "token_logprobs": [logprob]},
+                    }
+                ]
+            }
+        )
+        for token, logprob in tokens
+    ]
+    if done:
+        events.append("data: [DONE]")
+    return "\n\n".join(events) + "\n\n"
+
+
+@pytest.fixture
+def model_stream(monkeypatch):
+    sent = {}
+
+    def serve(body):
+        def handler(request):
+            sent["json"] = json.loads(request.content)
+            return httpx.Response(
+                200, text=body, headers={"content-type": "text/event-stream"}
+            )
+
+        monkeypatch.setattr(autocomplete, "_transport", httpx.MockTransport(handler))
+        return sent
+
+    monkeypatch.setattr(config, "AUTOCOMPLETE_URL", "http://model.test")
+    return serve
+
+
+def test_streaming_stops_at_the_first_unsure_token(model_stream):
+    sent = model_stream(
+        sse([(" the", lp(0.9)), (" model", lp(0.2)), (" learns", lp(0.9))])
+    )
+
+    result = asyncio.run(autocomplete.complete("prompt", 0.5))
+
+    assert sent["json"]["stream"] is True
+    assert sent["json"]["logprobs"] == 0
+    # Read up to and including the unsure token, then stopped.
+    assert [t for t, _ in result.tokens] == [" the", " model"]
+    assert result.text == " the model"
+    assert shape_suggestion(result.tokens, "", 0.5) == " the"
+
+
+def test_streaming_stops_after_a_sentence_end(model_stream):
+    model_stream(sse([(" works.", lp(0.9)), (" Then", lp(0.9))]))
+
+    result = asyncio.run(autocomplete.complete("prompt", 0.5))
+
+    assert [t for t, _ in result.tokens] == [" works."]
+
+
+def test_streaming_reads_to_the_end_when_every_token_is_sure(model_stream):
+    model_stream(sse([(" a", lp(0.9)), (" b", lp(0.8))]))
+
+    result = asyncio.run(autocomplete.complete("prompt", 0.5))
+
+    assert result.text == " a b"
+
+
+def test_streaming_surfaces_http_errors(monkeypatch):
+    monkeypatch.setattr(config, "AUTOCOMPLETE_URL", "http://model.test")
+    monkeypatch.setattr(
+        autocomplete,
+        "_transport",
+        httpx.MockTransport(lambda request: httpx.Response(503)),
+    )
+    with pytest.raises(httpx.HTTPStatusError):
+        asyncio.run(autocomplete.complete("prompt", 0.5))

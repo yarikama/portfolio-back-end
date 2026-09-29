@@ -43,7 +43,9 @@ async def complete(
         return empty
 
     try:
-        completion = await autocomplete.complete(prompt.text)
+        completion = await autocomplete.complete(
+            prompt.text, config.AUTOCOMPLETE_MIN_TOKEN_PROB
+        )
     except (httpx.HTTPError, KeyError, IndexError, ValueError) as err:
         logger.warning("autocomplete request failed: %s", err)
         return empty
@@ -62,6 +64,7 @@ async def complete(
         suggestion=suggestion,
         tokens=[[token, logprob] for token, logprob in completion.tokens],
         latency_ms=completion.latency_ms,
+        min_token_prob=config.AUTOCOMPLETE_MIN_TOKEN_PROB,
     )
     db.add(row)
     db.commit()
