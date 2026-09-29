@@ -1,4 +1,5 @@
-from typing import Callable
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 import joblib
 from core.config import MEMOIZATION_FLAG
@@ -14,9 +15,8 @@ def preload_model():
     MachineLearningModelHandlerScore.get_model(joblib.load)
 
 
-def create_start_app_handler(app: FastAPI) -> Callable:
-    def start_app() -> None:
-        if MEMOIZATION_FLAG:
-            preload_model()
-
-    return start_app
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    if MEMOIZATION_FLAG:
+        preload_model()
+    yield
