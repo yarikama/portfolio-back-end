@@ -129,6 +129,7 @@ app/
 | `AUTOCOMPLETE_URL` | OpenAI-compatible completions server for note autocomplete; empty disables it (503) | empty |
 | `AUTOCOMPLETE_MODEL`, `AUTOCOMPLETE_MODEL_VERSION` | Model name to request, and the version recorded with each suggestion | `autocomplete`, `unknown` |
 | `AUTOCOMPLETE_MIN_TOKEN_PROB` | Suggestions stop at the first token less likely than this | `0.5` |
+| `AUTOCOMPLETE_FREQUENCY_PENALTY` | Discourages repeating words the suggestion itself already used (not the note) | `1.5` |
 
 `make hash` prompts for the admin password without echoing it, asks for it twice, and can write the hash into `.env.local`.
 
