@@ -20,7 +20,7 @@ ENV_FILE := .env.${ENV}
 
 # Target section and Global definitions
 # -----------------------------------------------------------------------------
-.PHONY: all clean test install run deploy down lint format hash logs shell rebuild migrate-prod
+.PHONY: all clean test install run deploy down lint format hash logs shell rebuild
 
 all: clean install test
 
@@ -85,7 +85,7 @@ generate_dot_env:
 	fi
 	@if [[ ! -e .env.prod ]]; then \
 		cp .env.example .env.prod; \
-		echo "Created .env.prod (Modify for production: Neon, R2)"; \
+		echo "Created .env.prod (Modify for production secrets: auth, R2)"; \
 	fi
 
 clean:
@@ -118,16 +118,3 @@ history:
 
 stamp:
 	docker-compose exec app alembic stamp head
-
-migrate-prod:
-	@if [ ! -f .env.prod ]; then echo "Error: .env.prod not found!"; exit 1; fi
-	@set -euo pipefail; \
-	DATABASE_URL=""; \
-	while IFS= read -r line || [ -n "$$line" ]; do \
-		case "$$line" in \
-			""|\#*) continue ;; \
-			DATABASE_URL=*) DATABASE_URL="$${line#DATABASE_URL=}"; break ;; \
-		esac; \
-	done < .env.prod; \
-	if [ -z "$$DATABASE_URL" ]; then echo "Missing DATABASE_URL in .env.prod"; exit 1; fi; \
-	PYTHONPATH=app DATABASE_URL="$$DATABASE_URL" uv run alembic -c app/alembic.ini upgrade head
