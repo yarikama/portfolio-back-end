@@ -15,19 +15,12 @@ ifeq ($(MODEL_NAME),)
 MODEL_NAME := model.pkl
 endif
 
-# GCP Cloud Run configuration
-GCP_PROJECT := yarikama-portfolio
-GCP_REGION := us-central1
-GCP_SERVICE := portfolio-backend
-CLOUDSDK_PYTHON := /opt/homebrew/opt/python@3.12/bin/python3.12
-GCLOUD := /opt/homebrew/share/google-cloud-sdk/bin/gcloud
-
 ENV ?= local
 ENV_FILE := .env.${ENV}
 
 # Target section and Global definitions
 # -----------------------------------------------------------------------------
-.PHONY: all clean test install run deploy deploy-gcp down lint format hash logs shell rebuild migrate-prod
+.PHONY: all clean test install run deploy down lint format hash logs shell rebuild migrate-prod
 
 all: clean install test
 
@@ -72,36 +65,6 @@ deploy: generate_dot_env
 	ENV_FILE=$(ENV_FILE) docker-compose build
 	ENV_FILE=$(ENV_FILE) docker-compose up -d
 
-deploy-gcp: generate_dot_env
-	@if [ ! -f .env.prod ]; then echo "Error: .env.prod not found!"; exit 1; fi
-	@echo "Deploying to GCP Cloud Run using .env.prod..."
-	@export $$(grep -v '^#' .env.prod | xargs) && \
-	CLOUDSDK_PYTHON=$(CLOUDSDK_PYTHON) $(GCLOUD) run deploy $(GCP_SERVICE) \
-		--source . \
-		--platform managed \
-		--region $(GCP_REGION) \
-		--allow-unauthenticated \
-		--port 8080 \
-		--memory 512Mi \
-		--cpu 1 \
-		--min-instances 0 \
-		--max-instances 1 \
-		--project $(GCP_PROJECT) \
-		--set-env-vars "DATABASE_URL=$$DATABASE_URL" \
-		--set-env-vars "SECRET_KEY=$$SECRET_KEY" \
-		--set-env-vars "DEBUG=False" \
-		--set-env-vars "MEMOIZATION_FLAG=False" \
-		--set-env-vars "ADMIN_USERNAME=$$ADMIN_USERNAME" \
-		--set-env-vars "ADMIN_PASSWORD_HASH=$$ADMIN_PASSWORD_HASH" \
-		--set-env-vars "R2_ACCOUNT_ID=$$R2_ACCOUNT_ID" \
-		--set-env-vars "R2_ACCESS_KEY_ID=$$R2_ACCESS_KEY_ID" \
-		--set-env-vars "R2_SECRET_ACCESS_KEY=$$R2_SECRET_ACCESS_KEY" \
-		--set-env-vars "R2_BUCKET_NAME=$$R2_BUCKET_NAME" \
-		--set-env-vars "R2_PUBLIC_URL=$$R2_PUBLIC_URL" \
-		--quiet
-	@echo "Deployment complete!"
-	@echo "Service URL: https://$(GCP_SERVICE)-790579792548.$(GCP_REGION).run.app"
-
 down:
 	docker-compose down
 
@@ -122,7 +85,7 @@ generate_dot_env:
 	fi
 	@if [[ ! -e .env.prod ]]; then \
 		cp .env.example .env.prod; \
-		echo "Created .env.prod (Modify for GCP/Neon)"; \
+		echo "Created .env.prod (Modify for production: Neon, R2)"; \
 	fi
 
 clean:

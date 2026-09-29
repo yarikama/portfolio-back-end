@@ -9,7 +9,7 @@ Yarikama's Portfolio Backend API - Built with FastAPI
 - **ORM**: SQLAlchemy
 - **Migration**: Alembic
 - **Package Manager**: uv
-- **Hosting**: GCP Cloud Run
+- **Hosting**: k3s on a home server, exposed through Cloudflare Tunnel
 
 ## Quick Start
 
@@ -76,37 +76,12 @@ DATABASE_URL="your-database-url" PYTHONPATH=app uv run alembic -c app/alembic.in
 
 ## Deployment
 
-### GCP Cloud Run (Production)
+Production runs on a single-node k3s cluster and is served at `https://api.yarikama.com` through a Cloudflare Tunnel. The Kubernetes manifests, secret tooling and runbooks live in the private [homelab](https://github.com/yarikama/homelab) repo.
 
-Hosted on [GCP Cloud Run](https://cloud.google.com/run) (free tier).
+1. Merge to `main`. CI runs lint and tests, then builds the production image for `linux/amd64` and pushes it to GHCR as `ghcr.io/yarikama/portfolio-backend:sha-<short>` and `latest`.
+2. In the homelab repo, set the new tag in `apps/portfolio-backend/kustomization.yaml`, then run `kubectl apply -k apps/portfolio-backend`.
 
-```bash
-make deploy-gcp   # One-click deploy to GCP Cloud Run
-```
-
-**Service URL**: https://portfolio-backend-790579792548.us-central1.run.app
-
-**Prerequisites**:
-1. Install [gcloud CLI](https://cloud.google.com/sdk/docs/install)
-2. Login: `gcloud auth login`
-3. Set Python for gcloud (add to `~/.zshrc`):
-   ```bash
-   export CLOUDSDK_PYTHON=/opt/homebrew/opt/python@3.12/bin/python3.12
-   ```
-
-### Manual Deployment
-
-```bash
-export CLOUDSDK_PYTHON=/opt/homebrew/opt/python@3.12/bin/python3.12
-
-gcloud run deploy portfolio-backend \
-  --source . \
-  --platform managed \
-  --region us-central1 \
-  --allow-unauthenticated \
-  --port 8080 \
-  --project yarikama-portfolio
-```
+Database migrations run on their own: the pod's init container runs `alembic upgrade head` before the API starts. `make migrate-prod` still works for running them by hand against the database in `.env.prod`.
 
 ## Project Structure
 
@@ -156,7 +131,6 @@ make hash
 | Service | Free Quota |
 |---------|------------|
 | **Neon** | 0.5 GB storage |
-| **GCP Cloud Run** | 2M requests/month, 180K vCPU-sec |
 
 ## Make Commands
 
@@ -168,7 +142,6 @@ make hash
 | `make lint` | Check code style |
 | `make format` | Format code |
 | `make deploy` | Deploy with Docker Compose |
-| `make deploy-gcp` | Deploy to GCP Cloud Run |
 | `make down` | Stop Docker containers |
 | `make logs` | View Docker logs |
 | `make shell` | Enter Docker container |
