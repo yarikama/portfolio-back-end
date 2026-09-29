@@ -40,9 +40,10 @@ format:
 	uv run ruff format app/
 	uv run ruff check --fix app/
 
+# The password is read by Python's getpass: it is not echoed, and never
+# passes through the shell or into the Python source.
 hash:
-	@read -p "Enter password: " pwd && \
-	hash=$$(uv run python -c "import bcrypt; print(bcrypt.hashpw(b'$$pwd', bcrypt.gensalt()).decode())") && \
+	@hash=$$(uv run python -c "import bcrypt, getpass, sys; p = getpass.getpass('Enter password: '); sys.exit('Passwords do not match') if p != getpass.getpass('Confirm password: ') else print(bcrypt.hashpw(p.encode(), bcrypt.gensalt()).decode())") && \
 	echo "" && \
 	echo "Generated hash: $$hash" && \
 	echo "" && \
@@ -52,7 +53,7 @@ hash:
 	read -p "Update .env.local automatically? (y/n): " update && \
 	if [ "$$update" = "y" ]; then \
 		if grep -q "^ADMIN_PASSWORD_HASH=" .env.local 2>/dev/null; then \
-			sed -i.bak "s|^ADMIN_PASSWORD_HASH=.*|ADMIN_PASSWORD_HASH=$$hash|" .env.local && \
+			sed -i.bak "s|^ADMIN_PASSWORD_HASH=.*|ADMIN_PASSWORD_HASH=$$hash|" .env.local && rm -f .env.local.bak && \
 			echo "✓ Updated ADMIN_PASSWORD_HASH in .env.local"; \
 		else \
 			echo "ADMIN_PASSWORD_HASH=$$hash" >> .env.local && \
