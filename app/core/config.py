@@ -57,14 +57,19 @@ AUTOCOMPLETE_MODEL_VERSION: str = config(
 # half of those were exactly what was written next; lower shows more and
 # longer suggestions that are right less often (homelab
 # docs/10-autocomplete-plan.md). Recorded with every suggestion.
-# Discourages the model from repeating what it just wrote in the same
-# suggestion (it looped on phrases like "要符合台灣大學的學生，" over and
-# over). Only the suggestion's own tokens count, not the note: 1.5 removed
-# every loop seen in real suggestions with no loss of accuracy, while
-# repetition_penalty, which also counts the note, cost 10 points of
-# first-word accuracy (homelab docs/10-autocomplete-plan.md).
+# Discourage the model from repeating what it just wrote in the same
+# suggestion (it looped on phrases like "要符合台灣大學的學生，"). Both count
+# only the suggestion's own tokens, not the note: frequency per repeat,
+# presence once per token already used. 2.0 and 1.0 removed every loop seen
+# in real suggestions with no loss of accuracy, while repetition_penalty,
+# which also counts the note, cost 10 points of first-word accuracy (homelab
+# docs/10-autocomplete-plan.md). services.autocomplete.trim_repetition is the
+# safety net for what gets through.
 AUTOCOMPLETE_FREQUENCY_PENALTY: float = config(
-    "AUTOCOMPLETE_FREQUENCY_PENALTY", cast=float, default=1.5
+    "AUTOCOMPLETE_FREQUENCY_PENALTY", cast=float, default=2.0
+)
+AUTOCOMPLETE_PRESENCE_PENALTY: float = config(
+    "AUTOCOMPLETE_PRESENCE_PENALTY", cast=float, default=1.0
 )
 AUTOCOMPLETE_MIN_TOKEN_PROB: float = config(
     "AUTOCOMPLETE_MIN_TOKEN_PROB", cast=float, default=0.5

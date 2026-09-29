@@ -331,6 +331,7 @@ def test_streaming_stops_at_the_first_unsure_token(model_stream):
     assert sent["json"]["logprobs"] == 0
     assert sent["json"]["stop"] == ["\n", "<think>", "</think>"]
     assert sent["json"]["frequency_penalty"] == config.AUTOCOMPLETE_FREQUENCY_PENALTY
+    assert sent["json"]["presence_penalty"] == config.AUTOCOMPLETE_PRESENCE_PENALTY
     # Read up to and including the unsure token, then stopped.
     assert [t for t, _ in result.tokens] == [" the", " model"]
     assert result.text == " the model"
@@ -391,3 +392,36 @@ def test_pending_suggestions_expire(monkeypatch):
     id = autocomplete.remember(object())
     now[0] += autocomplete.PENDING_TTL_SECONDS + 1
     assert autocomplete.take(id) is None
+
+
+# ── repetition guard ─────────────────────────────────────────────────────────
+
+
+def test_an_echo_of_the_sentence_just_typed_is_dropped():
+    before = "請你幫我寫一個關於我的個人介紹，要符合台灣大學的學生，"
+    assert (
+        autocomplete.trim_repetition(before, "要符合台灣大學的學生，不要寫成英文") == ""
+    )
+
+
+def test_a_loop_inside_the_suggestion_is_cut_where_it_starts():
+    assert (
+        autocomplete.trim_repetition("我想", "寫一篇文章，寫一篇文章，寫一篇")
+        == "寫一篇文章，"
+    )
+    assert (
+        autocomplete.trim_repetition("It is", " very good and very good and")
+        == " very good and"
+    )
+
+
+def test_ordinary_suggestions_are_untouched():
+    before = "SVD factors a matrix into a rotation, a scaling, and another"
+    assert autocomplete.trim_repetition(before, " rotation.") == " rotation."
+    assert (
+        autocomplete.trim_repetition("你最近有沒有任何的", "煩惱心事？") == "煩惱心事？"
+    )
+
+
+def test_repeated_punctuation_is_not_a_loop():
+    assert autocomplete.trim_repetition("Title\n", "--------") == "--------"

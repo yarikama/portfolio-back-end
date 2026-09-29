@@ -88,6 +88,35 @@ def shape_suggestion(
     return text
 
 
+MIN_REPEAT = 4  # shorter repeats are too often legitimate ("a a" is not)
+MAX_REPEAT = 60
+
+
+def trim_repetition(before: str, suggestion: str) -> str:
+    """Cut the suggestion where it starts repeating the text right before.
+
+    The penalties sent to the model only see the suggestion, so it can still
+    open by echoing the sentence just typed, or loop on a phrase. Reading the
+    text before the cursor and the suggestion as one, the suggestion ends at
+    the first point where the next few characters (at least MIN_REPEAT, with
+    at least one letter or CJK character, so "----" rules survive) are the
+    same as the ones just before them.
+    """
+    tail = before[-MAX_REPEAT:]
+    text = tail + suggestion
+    for i in range(len(suggestion)):
+        at = len(tail) + i
+        for size in range(MIN_REPEAT, min(MAX_REPEAT, at) + 1):
+            unit = text[at : at + size]
+            if (
+                len(unit) == size
+                and unit == text[at - size : at]
+                and any(ch.isalnum() for ch in unit)
+            ):
+                return suggestion[:i].rstrip()
+    return suggestion
+
+
 async def complete(prompt: str, min_prob: float) -> Completion:
     """Ask the model to continue prompt, streaming token by token.
 
@@ -110,6 +139,7 @@ async def complete(prompt: str, min_prob: float) -> Completion:
                 "temperature": 0,
                 "stop": STOP,
                 "frequency_penalty": config.AUTOCOMPLETE_FREQUENCY_PENALTY,
+                "presence_penalty": config.AUTOCOMPLETE_PRESENCE_PENALTY,
                 # 0: the log-probability of each generated token, no alternatives.
                 "logprobs": 0,
                 "stream": True,

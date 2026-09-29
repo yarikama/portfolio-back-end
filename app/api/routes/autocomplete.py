@@ -49,6 +49,7 @@ async def complete(request: CompletionRequest, _admin: CurrentAdmin):
     suggestion = autocomplete.shape_suggestion(
         completion.tokens, prompt.trailing_space, config.AUTOCOMPLETE_MIN_TOKEN_PROB
     )
+    suggestion = autocomplete.trim_repetition(request.prefix, suggestion)
     if not suggestion:
         return empty
 
