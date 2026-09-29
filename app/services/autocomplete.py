@@ -15,6 +15,9 @@ MAX_CONTEXT_CHARS = 2000  # about 500 tokens: enough context, fast prefill
 MAX_TOKENS = 16  # an upper bound; generation usually stops much earlier
 TIMEOUT_SECONDS = 2.0  # past this the author has typed on; give up quietly
 SENTENCE_END = (".", "!", "?")
+# A suggestion is one line. The base model also sometimes emits the
+# thinking tags of Qwen's chat format; nothing after them belongs in a note.
+STOP = ["\n", "<think>", "</think>"]
 
 
 # Tests swap in an httpx.MockTransport.
@@ -105,7 +108,8 @@ async def complete(prompt: str, min_prob: float) -> Completion:
                 "prompt": prompt,
                 "max_tokens": MAX_TOKENS,
                 "temperature": 0,
-                "stop": ["\n"],
+                "stop": STOP,
+                "frequency_penalty": config.AUTOCOMPLETE_FREQUENCY_PENALTY,
                 # 0: the log-probability of each generated token, no alternatives.
                 "logprobs": 0,
                 "stream": True,

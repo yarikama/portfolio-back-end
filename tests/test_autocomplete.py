@@ -329,6 +329,8 @@ def test_streaming_stops_at_the_first_unsure_token(model_stream):
 
     assert sent["json"]["stream"] is True
     assert sent["json"]["logprobs"] == 0
+    assert sent["json"]["stop"] == ["\n", "<think>", "</think>"]
+    assert sent["json"]["frequency_penalty"] == config.AUTOCOMPLETE_FREQUENCY_PENALTY
     # Read up to and including the unsure token, then stopped.
     assert [t for t, _ in result.tokens] == [" the", " model"]
     assert result.text == " the model"
