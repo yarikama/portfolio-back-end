@@ -17,6 +17,10 @@ from sqlalchemy.orm import Session, joinedload
 
 router = APIRouter()
 
+# Display order: the `order` set through the admin reorder endpoint, then newest
+# first. id breaks any remaining tie so offset pagination is stable.
+PROJECT_DISPLAY_ORDER = (Project.order, Project.created_at.desc(), Project.id)
+
 # ============================================================================
 # Admin Routes (require authentication)
 # ============================================================================
@@ -43,7 +47,7 @@ async def get_all_projects_admin(
         query = query.filter(Project.tags.contains([tag]))
 
     total = query.count()
-    projects = query.offset(offset).limit(limit).all()
+    projects = query.order_by(*PROJECT_DISPLAY_ORDER).offset(offset).limit(limit).all()
 
     return {
         "data": [ProjectResponse.model_validate(p) for p in projects],
@@ -224,7 +228,7 @@ async def get_projects(
         query = query.filter(Project.tags.contains([tag]))
 
     total = query.count()
-    projects = query.offset(offset).limit(limit).all()
+    projects = query.order_by(*PROJECT_DISPLAY_ORDER).offset(offset).limit(limit).all()
 
     return {
         "data": [ProjectResponse.model_validate(p) for p in projects],
