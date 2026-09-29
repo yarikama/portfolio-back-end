@@ -5,7 +5,7 @@ Yarikama's Portfolio Backend API - Built with FastAPI
 ## Tech Stack
 
 - **Framework**: FastAPI
-- **Database**: PostgreSQL (Neon)
+- **Database**: PostgreSQL 17 (CloudNativePG on k3s)
 - **ORM**: SQLAlchemy
 - **Migration**: Alembic
 - **Package Manager**: uv
@@ -54,12 +54,9 @@ make test       # Run all tests
 
 ## Database
 
-### Neon PostgreSQL (Production)
+### PostgreSQL (Production)
 
-Database is hosted on [Neon](https://neon.tech) (free tier).
-
-- **Project**: `yarikama-portfolio-backend`
-- **Region**: `aws-us-east-1`
+PostgreSQL 17 runs on the k3s cluster, managed by [CloudNativePG](https://cloudnative-pg.io). WAL is archived continuously and a base backup is taken daily to the Cloudflare R2 bucket `yarikama-db-backups`, so the database can be restored to any point in the last 30 days. Manifests and the restore runbook live in the homelab repo under `apps/portfolio-db`.
 
 ### Migrations
 
@@ -81,7 +78,13 @@ Production runs on a single-node k3s cluster and is served at `https://api.yarik
 1. Merge to `main`. CI runs lint and tests, then builds the production image for `linux/amd64` and pushes it to GHCR as `ghcr.io/yarikama/portfolio-backend:sha-<short>` and `latest`.
 2. In the homelab repo, set the new tag in `apps/portfolio-backend/kustomization.yaml`, then run `kubectl apply -k apps/portfolio-backend`.
 
-Database migrations run on their own: the pod's init container runs `alembic upgrade head` before the API starts. `make migrate-prod` still works for running them by hand against the database in `.env.prod`.
+The database is PostgreSQL on the same cluster, managed by CloudNativePG, with continuous backups to Cloudflare R2.
+
+Database migrations run on their own: the pod's init container runs `alembic upgrade head` before the API starts. To run Alembic by hand against production, run it inside the pod, which already has the right `DATABASE_URL`:
+
+```bash
+kubectl -n portfolio exec deploy/portfolio-backend -c api -- alembic -c alembic.ini current
+```
 
 ## Project Structure
 
@@ -130,7 +133,7 @@ make hash
 
 | Service | Free Quota |
 |---------|------------|
-| **Neon** | 0.5 GB storage |
+| **Cloudflare R2** | 10 GB storage (uploaded images and database backups) |
 
 ## Make Commands
 
