@@ -22,6 +22,10 @@ from db.models.projects import Project
 from db.models.log import RequestLog
 from db.models.lab_notes import LabNote
 from db.models.contact import ContactMessage
+# Every model must be imported here, or autogenerate proposes dropping its
+# table.
+from db.models.category import Category
+from db.models.autocomplete import AutocompleteSuggestion
 
 target_metadata = Base.metadata
 

@@ -126,6 +126,9 @@ app/
 | `DEBUG` | Debug mode | `False` |
 | `MEMOIZATION_FLAG` | Load the ML model at startup | `True` (production sets `False`) |
 | `MODEL_PATH`, `MODEL_NAME` | Where the ML model is loaded from | `./ml/model/`, `model.pkl` |
+| `AUTOCOMPLETE_URL` | OpenAI-compatible completions server for note autocomplete; empty disables it (503) | empty |
+| `AUTOCOMPLETE_MODEL`, `AUTOCOMPLETE_MODEL_VERSION` | Model name to request, and the version recorded with each suggestion | `autocomplete`, `unknown` |
+| `AUTOCOMPLETE_MIN_TOKEN_PROB` | Suggestions stop at the first token less likely than this | `0.5` |
 
 `make hash` prompts for the admin password without echoing it, asks for it twice, and can write the hash into `.env.local`.
 
@@ -142,6 +145,8 @@ app/
 | `POST /api/v1/contact` | Submit the contact form |
 | `/api/v1/admin/...` | Create, edit, reorder and delete content, list contact messages, upload images. Needs `Authorization: Bearer <token>` |
 | `POST /api/v1/predict`, `GET /api/v1/health` | ML predictor and its self-check (see Known limitations) |
+| `POST /api/v1/admin/complete` | Note autocomplete: `{"prefix", "title", "noteId"}` → `{"id", "suggestion"}` (empty when the model is unsure or unavailable). Admin only |
+| `POST /api/v1/admin/complete/{id}/feedback` | `{"outcome": "accepted" \| "rejected" \| "ignored", "acceptedChars"}`, recorded once per suggestion |
 
 Lists return `{"data": [...], "pagination": {"total", "limit", "offset", "hasMore"}}` (categories: `data` only); single items return `{"data": {...}}`. Projects and lab notes use camelCase fields.
 

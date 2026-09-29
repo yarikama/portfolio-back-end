@@ -6,7 +6,7 @@ from api.routes import predictor
 from db.models.log import RequestLog
 from db.session import Base
 from schemas.prediction import MachineLearningDataInput
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, func
 from sqlalchemy.orm import sessionmaker
 
 
@@ -35,13 +35,17 @@ async def test_predict_logs_request_response(monkeypatch):
     }
     data = MachineLearningDataInput(**payload)
 
+    # The database is shared with the other tests, some of which log
+    # predictions too, so look only at what this call added.
+    with testing_session_local() as db:
+        last_id = db.query(func.max(RequestLog.id)).scalar() or 0
+
     response = await predictor.predict(data)
     assert response.prediction == 1.0
 
-    db = testing_session_local()
-    logs = db.query(RequestLog).all()
-    assert len(logs) == 1
-    log = logs[0]
-    assert json.loads(log.request) == data.model_dump()
-    assert json.loads(log.response) == response.model_dump()
-    db.close()
+    with testing_session_local() as db:
+        logs = db.query(RequestLog).filter(RequestLog.id > last_id).all()
+        assert len(logs) == 1
+        log = logs[0]
+        assert json.loads(log.request) == data.model_dump()
+        assert json.loads(log.response) == response.model_dump()

@@ -43,3 +43,18 @@ R2_ACCESS_KEY_ID: str = config("R2_ACCESS_KEY_ID", default="")
 R2_SECRET_ACCESS_KEY: str = config("R2_SECRET_ACCESS_KEY", default="")
 R2_BUCKET_NAME: str = config("R2_BUCKET_NAME", default="yarikama-portfolio-backend")
 R2_PUBLIC_URL: str = config("R2_PUBLIC_URL", default="")
+
+# Note autocomplete: an OpenAI-compatible completions server (vLLM in the
+# homelab cluster). Empty disables the feature; the endpoint then answers 503.
+AUTOCOMPLETE_URL: str = config("AUTOCOMPLETE_URL", default="")
+AUTOCOMPLETE_MODEL: str = config("AUTOCOMPLETE_MODEL", default="autocomplete")
+# Recorded with every suggestion, to compare models and adapters later.
+AUTOCOMPLETE_MODEL_VERSION: str = config(
+    "AUTOCOMPLETE_MODEL_VERSION", default="unknown"
+)
+# A suggestion keeps tokens while each one's probability stays at or above
+# this. 0.5 showed a suggestion about half the time, and about half of those
+# were exactly what was written next (homelab docs/10-autocomplete-plan.md).
+AUTOCOMPLETE_MIN_TOKEN_PROB: float = config(
+    "AUTOCOMPLETE_MIN_TOKEN_PROB", cast=float, default=0.5
+)
