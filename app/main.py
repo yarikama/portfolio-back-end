@@ -27,6 +27,12 @@ def get_application() -> FastAPI:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        # Admin requests carry an Authorization header, so the browser asks
+        # permission (a preflight OPTIONS round trip) before them. Starlette's
+        # default lets it remember the answer for 10 minutes; 2 hours is
+        # Chrome's cap, and saves a round trip on the first autocomplete
+        # request after every pause in writing.
+        max_age=7200,
     )
 
     application.include_router(health_router)
