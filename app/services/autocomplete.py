@@ -3,7 +3,10 @@
 import json
 import math
 import time
+import uuid
+from collections import OrderedDict
 from dataclasses import dataclass
+from datetime import datetime
 
 import httpx
 from core import config
@@ -131,3 +134,79 @@ async def complete(prompt: str, min_prob: float) -> Completion:
         tokens=tokens,
         latency_ms=round((time.perf_counter() - started) * 1000),
     )
+
+
+# ── suggestions waiting for feedback ─────────────────────────────────────────
+#
+# A suggestion is stored only once the editor reports what became of it, so
+# the table holds suggestions that were actually shown. Many never are: the
+# author types on while the request is in flight and the editor drops it.
+# Until then they wait here. In memory, which is fine while the backend runs
+# as a single replica (it does, see the Deployment); more replicas would need
+# a shared store.
+
+PENDING_TTL_SECONDS = 3600  # a suggestion left on screen this long is let go
+PENDING_MAX = 1000
+
+
+@dataclass
+class Pending:
+    created_at: datetime
+    note_id: uuid.UUID | None
+    prompt: str
+    completion: Completion
+    suggestion: str
+    min_prob: float
+    model_version: str
+
+
+_pending: "OrderedDict[uuid.UUID, tuple[float, Pending]]" = OrderedDict()
+
+
+def _prune() -> None:
+    now = time.monotonic()
+    while _pending:
+        _, (stored, _) = next(iter(_pending.items()))
+        if now - stored > PENDING_TTL_SECONDS or len(_pending) > PENDING_MAX:
+            _pending.popitem(last=False)
+        else:
+            break
+
+
+def remember(pending: Pending) -> uuid.UUID:
+    _prune()
+    id = uuid.uuid4()
+    _pending[id] = (time.monotonic(), pending)
+    return id
+
+
+def take(id: uuid.UUID) -> Pending | None:
+    """The suggestion with this id, if it is still waiting; it stops waiting."""
+    _prune()
+    entry = _pending.pop(id, None)
+    return entry[1] if entry else None
+
+
+def accepted_token_count(
+    tokens: list[tuple[str, float]],
+    completion: str,
+    suggestion: str,
+    accepted_chars: int,
+) -> int:
+    """How many generated tokens the accepted part of the suggestion covers:
+    where the author stopped, in the model's own units.
+
+    The suggestion is the completion minus a leading space the author had
+    already typed, so positions are shifted by that. A token counts only if
+    it was taken whole. Approximate when a token is a fragment of a
+    multi-byte character.
+    """
+    offset = max(completion.find(suggestion), 0)
+    end = offset + accepted_chars
+    covered, count = 0, 0
+    for token, _ in tokens:
+        covered += len(token)
+        if covered > end:
+            break
+        count += 1
+    return count

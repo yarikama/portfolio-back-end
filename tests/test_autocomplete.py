@@ -105,6 +105,7 @@ def client(session_factory, monkeypatch):
     monkeypatch.setattr(config, "AUTOCOMPLETE_URL", "http://model.test")
     monkeypatch.setattr(config, "AUTOCOMPLETE_MODEL_VERSION", VERSION)
     monkeypatch.setattr(config, "AUTOCOMPLETE_MIN_TOKEN_PROB", 0.5)
+    autocomplete._pending.clear()
 
     def override_get_db():
         db = session_factory()
@@ -130,7 +131,16 @@ def fake_model(monkeypatch, tokens=None, error=None):
     monkeypatch.setattr(autocomplete, "complete", complete)
 
 
-def test_a_confident_completion_is_shown_and_recorded(
+def count_rows(session_factory):
+    with session_factory() as db:
+        return (
+            db.query(AutocompleteSuggestion)
+            .filter(AutocompleteSuggestion.model_version == VERSION)
+            .count()
+        )
+
+
+def test_a_suggestion_is_recorded_when_its_outcome_is_reported(
     client, session_factory, monkeypatch
 ):
     fake_model(monkeypatch, [(" was", lp(0.9)), (" his", lp(0.7)), (" 3D", lp(0.1))])
@@ -143,6 +153,14 @@ def test_a_confident_completion_is_shown_and_recorded(
     assert response.status_code == 200
     data = response.json()["data"]
     assert data["suggestion"] == "was his"
+    # Not yet: it may never be shown.
+    assert count_rows(session_factory) == 0
+
+    client.post(
+        f"/api/v1/admin/complete/{data['id']}/feedback",
+        json={"outcome": "rejected", "acceptedChars": 4},
+    )
+
     with session_factory() as db:
         row = db.get(AutocompleteSuggestion, data["id"])
         assert row.prompt == "# Notes\n\nWhat impressed me"
@@ -151,7 +169,20 @@ def test_a_confident_completion_is_shown_and_recorded(
         assert row.model_version == VERSION
         assert row.latency_ms == 42
         assert row.min_token_prob == 0.5
-        assert row.outcome is None
+        assert row.outcome == "rejected"
+        # "was " is the whole of the " was" token (its space was typed).
+        assert row.accepted_chars == 4
+        assert row.accepted_tokens == 1
+
+
+def test_a_suggestion_never_reported_leaves_no_row(
+    client, session_factory, monkeypatch
+):
+    fake_model(monkeypatch, [(" world", lp(0.9))])
+
+    client.post("/api/v1/admin/complete", json={"prefix": "Hello"})
+
+    assert count_rows(session_factory) == 0
 
 
 def test_an_unsure_completion_shows_nothing_and_is_not_recorded(
@@ -162,13 +193,7 @@ def test_an_unsure_completion_shows_nothing_and_is_not_recorded(
     response = client.post("/api/v1/admin/complete", json={"prefix": "Hello"})
 
     assert response.json()["data"] == {"id": None, "suggestion": ""}
-    with session_factory() as db:
-        assert (
-            db.query(AutocompleteSuggestion)
-            .filter(AutocompleteSuggestion.model_version == VERSION)
-            .count()
-            == 0
-        )
+    assert count_rows(session_factory) == 0
 
 
 def test_a_model_failure_shows_nothing(client, monkeypatch):
@@ -207,7 +232,34 @@ def test_feedback_is_recorded_once(client, session_factory, monkeypatch):
         row = db.get(AutocompleteSuggestion, suggestion_id)
         assert row.outcome == "accepted"
         assert row.accepted_chars == 6
+        assert row.accepted_tokens == 1
         assert row.resolved_at is not None
+
+
+def test_feedback_still_updates_rows_stored_on_generation(client, session_factory):
+    # Before suggestions waited for feedback, rows were written right away.
+    with session_factory() as db:
+        row = AutocompleteSuggestion(
+            model_version=VERSION,
+            prompt="p",
+            completion=" a b c",
+            suggestion=" a b c",
+            tokens=[[" a", -0.1], [" b", -0.1], [" c", -0.1]],
+            latency_ms=1,
+        )
+        db.add(row)
+        db.commit()
+        row_id = row.id
+
+    client.post(
+        f"/api/v1/admin/complete/{row_id}/feedback",
+        json={"outcome": "rejected", "acceptedChars": 4},
+    )
+
+    with session_factory() as db:
+        row = db.get(AutocompleteSuggestion, row_id)
+        assert row.outcome == "rejected"
+        assert row.accepted_tokens == 2
 
 
 def test_feedback_for_an_unknown_suggestion_is_404(client):
@@ -308,3 +360,32 @@ def test_streaming_surfaces_http_errors(monkeypatch):
     )
     with pytest.raises(httpx.HTTPStatusError):
         asyncio.run(autocomplete.complete("prompt", 0.5))
+
+
+# ── where the author stopped, in tokens ─────────────────────────────────────
+
+
+def test_accepted_tokens_counts_whole_tokens_only():
+    tokens = [(" the", 0.0), (" model", 0.0), (" learns", 0.0)]
+    completion = " the model learns"
+    assert autocomplete.accepted_token_count(tokens, completion, completion, 0) == 0
+    assert autocomplete.accepted_token_count(tokens, completion, completion, 4) == 1
+    # Halfway into " model" is still one whole token.
+    assert autocomplete.accepted_token_count(tokens, completion, completion, 7) == 1
+    assert autocomplete.accepted_token_count(tokens, completion, completion, 17) == 3
+
+
+def test_accepted_tokens_allows_for_the_space_the_author_typed():
+    tokens = [(" was", 0.0), (" his", 0.0)]
+    # Shown as "was his": " was" is taken whole once "was" is accepted.
+    assert autocomplete.accepted_token_count(tokens, " was his", "was his", 3) == 1
+    assert autocomplete.accepted_token_count(tokens, " was his", "was his", 7) == 2
+
+
+def test_pending_suggestions_expire(monkeypatch):
+    autocomplete._pending.clear()
+    now = [1000.0]
+    monkeypatch.setattr(autocomplete.time, "monotonic", lambda: now[0])
+    id = autocomplete.remember(object())
+    now[0] += autocomplete.PENDING_TTL_SECONDS + 1
+    assert autocomplete.take(id) is None
