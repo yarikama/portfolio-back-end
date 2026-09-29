@@ -22,11 +22,7 @@ router = APIRouter()
 
 
 @router.post("/admin/complete")
-async def complete(
-    request: CompletionRequest,
-    _admin: CurrentAdmin,
-    db: Session = Depends(get_db),
-):
+async def complete(request: CompletionRequest, _admin: CurrentAdmin):
     """Suggest how the note continues from the cursor.
 
     Every failure degrades to "no suggestion": the editor must keep working
@@ -56,20 +52,21 @@ async def complete(
     if not suggestion:
         return empty
 
-    row = AutocompleteSuggestion(
-        model_version=config.AUTOCOMPLETE_MODEL_VERSION,
-        note_id=request.note_id,
-        prompt=prompt.text,
-        completion=completion.text,
-        suggestion=suggestion,
-        tokens=[[token, logprob] for token, logprob in completion.tokens],
-        latency_ms=completion.latency_ms,
-        min_token_prob=config.AUTOCOMPLETE_MIN_TOKEN_PROB,
+    # Not stored yet: only once the editor reports back (see feedback), so
+    # suggestions that were never shown leave no row.
+    id = autocomplete.remember(
+        autocomplete.Pending(
+            created_at=datetime.now(timezone.utc),
+            note_id=request.note_id,
+            prompt=prompt.text,
+            completion=completion,
+            suggestion=suggestion,
+            min_prob=config.AUTOCOMPLETE_MIN_TOKEN_PROB,
+            model_version=config.AUTOCOMPLETE_MODEL_VERSION,
+        )
     )
-    db.add(row)
-    db.commit()
     return {
-        "data": CompletionResponse(id=row.id, suggestion=suggestion).model_dump(
+        "data": CompletionResponse(id=id, suggestion=suggestion).model_dump(
             by_alias=True, mode="json"
         )
     }
@@ -82,13 +79,60 @@ async def feedback(
     _admin: CurrentAdmin,
     db: Session = Depends(get_db),
 ):
-    """Record what became of a suggestion. Only the first report counts."""
+    """Record a shown suggestion and what became of it, including where the
+    author stopped taking it. Only the first report counts."""
+    now = datetime.now(timezone.utc)
+    pending = autocomplete.take(id)
+    if pending is not None:
+        completion = pending.completion
+        db.add(
+            AutocompleteSuggestion(
+                id=id,
+                created_at=pending.created_at,
+                model_version=pending.model_version,
+                note_id=pending.note_id,
+                prompt=pending.prompt,
+                completion=completion.text,
+                suggestion=pending.suggestion,
+                tokens=[[token, logprob] for token, logprob in completion.tokens],
+                latency_ms=completion.latency_ms,
+                min_token_prob=pending.min_prob,
+                outcome=body.outcome,
+                accepted_chars=body.accepted_chars,
+                accepted_tokens=_accepted_tokens(
+                    completion.tokens,
+                    completion.text,
+                    pending.suggestion,
+                    body.accepted_chars,
+                ),
+                resolved_at=now,
+            )
+        )
+        db.commit()
+        return Response(status_code=204)
+
+    # Already recorded (a repeated report), or stored before suggestions
+    # waited for feedback.
     row = db.get(AutocompleteSuggestion, id)
     if row is None:
         raise HTTPException(status_code=404, detail="Suggestion not found")
     if row.outcome is None:
         row.outcome = body.outcome
         row.accepted_chars = body.accepted_chars
-        row.resolved_at = datetime.now(timezone.utc)
+        row.accepted_tokens = _accepted_tokens(
+            [tuple(t) for t in row.tokens or []],
+            row.completion,
+            row.suggestion,
+            body.accepted_chars,
+        )
+        row.resolved_at = now
         db.commit()
     return Response(status_code=204)
+
+
+def _accepted_tokens(tokens, completion, suggestion, accepted_chars):
+    if accepted_chars is None:
+        return None
+    return autocomplete.accepted_token_count(
+        tokens, completion, suggestion, accepted_chars
+    )

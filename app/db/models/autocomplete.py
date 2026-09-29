@@ -9,6 +9,10 @@ from sqlalchemy.sql import func
 class AutocompleteSuggestion(Base):
     """One suggestion shown in the note editor, and what became of it.
 
+    Written when the editor reports the outcome, so every row was shown.
+    (Rows from before 2026-09-29 were written on generation; those with a
+    null outcome were never shown.)
+
     This is the training and evaluation data for the autocomplete model: the
     context it saw, what it proposed, and whether the author took it.
     """
@@ -40,4 +44,6 @@ class AutocompleteSuggestion(Base):
     # How much of the suggestion ended up in the text (all of it on Tab,
     # a prefix when the author typed along with it).
     accepted_chars = Column(Integer, nullable=True)
+    # The same in generated tokens: where the author stopped taking it.
+    accepted_tokens = Column(Integer, nullable=True)
     resolved_at = Column(DateTime(timezone=True), nullable=True)
