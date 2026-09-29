@@ -1,12 +1,15 @@
 from api.routes.api import router as api_router
+from api.routes.health import router as health_router
 from core.config import API_PREFIX, DEBUG, PROJECT_NAME, VERSION
-from core.events import create_start_app_handler
+from core.events import lifespan
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 
 def get_application() -> FastAPI:
-    application = FastAPI(title=PROJECT_NAME, debug=DEBUG, version=VERSION)
+    application = FastAPI(
+        title=PROJECT_NAME, debug=DEBUG, version=VERSION, lifespan=lifespan
+    )
 
     # CORS settings
     origins = [
@@ -26,8 +29,8 @@ def get_application() -> FastAPI:
         allow_headers=["*"],
     )
 
+    application.include_router(health_router)
     application.include_router(api_router, prefix=API_PREFIX)
-    application.add_event_handler("startup", create_start_app_handler(application))
     return application
 
 
