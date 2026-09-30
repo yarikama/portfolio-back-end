@@ -12,7 +12,7 @@ from services.image_jobs import (
     reconcile,
 )
 from services.images import WIDTHS, is_original, make_variants, variant_key
-from services.jobs import Worker
+from services.jobs import Worker, dead_letter_stream
 
 
 def png(width, height, mode="RGB", exif_orientation=None):
@@ -167,3 +167,21 @@ async def test_uploading_an_image_queues_its_variants(redis, monkeypatch):
     assert response.status_code == 200
     [(_, job)] = await redis.xrange(image_jobs.STREAM)
     assert job == {b"key": b"covers/20260930/abcd1234.png"}
+
+
+@pytest.mark.anyio
+async def test_reconcile_skips_images_whose_job_gave_up(redis):
+    storage = FakeStorage(
+        {"test/broken.png": b"\x89PNG truncated", "covers/new.png": png(10, 10)}
+    )
+    await redis.xadd(
+        dead_letter_stream(STREAM), {"key": "test/broken.png", "error": "broken"}
+    )
+
+    assert await reconcile(storage, redis) == 1
+    [(_, job)] = await redis.xrange(STREAM)
+    assert job == {b"key": b"covers/new.png"}
+
+    # Clearing the dead letters lets the next reconcile try again.
+    await redis.delete(dead_letter_stream(STREAM))
+    assert await reconcile(storage, redis) == 2

@@ -18,6 +18,9 @@ NOTIFICATIONS = Counter(
     "Emails about new contact messages, by result.",
     ["result"],
 )
+# Start at 0, so increase() sees the first failure (see services.rate_limit).
+for _result in ("sent", "failed"):
+    NOTIFICATIONS.labels(_result)
 
 
 @dataclass(frozen=True)
