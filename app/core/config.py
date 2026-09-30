@@ -1,7 +1,7 @@
 import logging
 import sys
 
-from core.logging import InterceptHandler
+from core.logging import FORMAT, InterceptHandler, add_trace_id
 from loguru import logger
 from starlette.config import Config
 from starlette.datastructures import Secret
@@ -14,7 +14,6 @@ DEBUG: bool = config("DEBUG", cast=bool, default=False)
 MAX_CONNECTIONS_COUNT: int = config("MAX_CONNECTIONS_COUNT", cast=int, default=10)
 MIN_CONNECTIONS_COUNT: int = config("MIN_CONNECTIONS_COUNT", cast=int, default=10)
 SECRET_KEY: Secret = config("SECRET_KEY", cast=Secret, default="")
-MEMOIZATION_FLAG: bool = config("MEMOIZATION_FLAG", cast=bool, default=True)
 DATABASE_URL: str = config("DATABASE_URL", default="sqlite:///./app.db")
 
 PROJECT_NAME: str = config("PROJECT_NAME", default="Portfolio-Back-End")
@@ -26,16 +25,32 @@ ACCESS_TOKEN_EXPIRE_MINUTES: int = config(
     "ACCESS_TOKEN_EXPIRE_MINUTES", cast=int, default=120
 )
 
+# Rate limits (services.rate_limit) are kept in Redis, e.g.
+# redis://:password@host:6379/0. Empty turns them off (local development).
+REDIS_URL: Secret = config("REDIS_URL", cast=Secret, default="")
+# Email about new contact messages, over SMTP with STARTTLS (for Gmail: the
+# address and an app password). Any of user, password or recipient empty
+# turns it off; messages are still saved.
+SMTP_HOST: str = config("SMTP_HOST", default="smtp.gmail.com")
+SMTP_PORT: int = config("SMTP_PORT", cast=int, default=587)
+SMTP_USERNAME: str = config("SMTP_USERNAME", default="")
+SMTP_PASSWORD: Secret = config("SMTP_PASSWORD", cast=Secret, default="")
+CONTACT_NOTIFY_TO: str = config("CONTACT_NOTIFY_TO", default="")
+
+# Prometheus metrics on this port, separate from the API port so the public
+# Ingress never exposes them. 0 turns them off.
+METRICS_PORT: int = config("METRICS_PORT", cast=int, default=0)
+
 # logging configuration
 LOGGING_LEVEL = logging.DEBUG if DEBUG else logging.INFO
 logging.basicConfig(
     handlers=[InterceptHandler(level=LOGGING_LEVEL)], level=LOGGING_LEVEL
 )
-logger.configure(handlers=[{"sink": sys.stderr, "level": LOGGING_LEVEL}])
+logger.configure(
+    handlers=[{"sink": sys.stderr, "level": LOGGING_LEVEL, "format": FORMAT}],
+    patcher=add_trace_id,
+)
 
-MODEL_PATH = config("MODEL_PATH", default="./ml/model/")
-MODEL_NAME = config("MODEL_NAME", default="model.pkl")
-INPUT_EXAMPLE = config("INPUT_EXAMPLE", default="./ml/model/examples/example.json")
 
 # R2 Storage configuration
 R2_ACCOUNT_ID: str = config("R2_ACCOUNT_ID", default="")

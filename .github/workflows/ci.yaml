@@ -33,6 +33,17 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+      # The rate-limit tests run their Lua scripts here as well as in
+      # fakeredis, so a difference between the two cannot hide a bug.
+      redis:
+        image: redis:8.10.2-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
@@ -44,6 +55,7 @@ jobs:
         run: uv run pytest -v
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+          REDIS_TEST_URL: redis://localhost:6379/15
 
   image:
     needs: [lint, test]

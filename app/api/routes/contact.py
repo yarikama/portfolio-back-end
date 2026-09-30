@@ -2,25 +2,39 @@ from typing import Optional
 from uuid import UUID
 
 from api.dependencies import CurrentAdmin
+from api.dependencies.rate_limit import rate_limit
 from core.paginator import offset_pagination
 from db.dependency import get_db
 from db.models.contact import ContactMessage
-from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Path, Query
 from schemas.contact import ContactCreate, ContactResponse, ContactUpdate
+from services.notify import NewMessage, send_contact_notification
+from services.rate_limit import CONTACT
 from sqlalchemy.orm import Session
 
 router = APIRouter()
 
 
-@router.post("/contact", status_code=201)
+@router.post(
+    "/contact",
+    status_code=201,
+    dependencies=[Depends(rate_limit(CONTACT, "messages"))],
+)
 async def create_contact(
     contact: ContactCreate,
+    background: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
     db_contact = ContactMessage(**contact.model_dump())
     db.add(db_contact)
     db.commit()
     db.refresh(db_contact)
+    # After the response: the visitor does not wait for Gmail, and a failed
+    # email cannot fail a message that is already saved.
+    background.add_task(
+        send_contact_notification,
+        NewMessage(contact.name, contact.email, contact.subject, contact.message),
+    )
     return {
         "data": {
             "id": str(db_contact.id),
