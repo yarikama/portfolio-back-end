@@ -127,8 +127,6 @@ app/
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | Token lifetime | `30` |
 | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`, `R2_PUBLIC_URL` | Cloudflare R2, for image uploads | bucket `yarikama-portfolio-backend` |
 | `DEBUG` | Debug mode | `False` |
-| `MEMOIZATION_FLAG` | Load the ML model at startup | `True` (production sets `False`) |
-| `MODEL_PATH`, `MODEL_NAME` | Where the ML model is loaded from | `./ml/model/`, `model.pkl` |
 | `REDIS_URL` | Redis for rate limits, e.g. `redis://:password@host:6379/0`; empty turns rate limiting off | empty |
 | `METRICS_PORT` | Serve Prometheus metrics on this port (kept off the API port, so the public Ingress never exposes them); `0` turns them off | `0` |
 | `AUTOCOMPLETE_URL` | OpenAI-compatible completions server for note autocomplete; empty disables it (503) | empty |
@@ -150,7 +148,6 @@ app/
 | `GET /api/v1/categories` | Project categories |
 | `POST /api/v1/contact` | Submit the contact form |
 | `/api/v1/admin/...` | Create, edit, reorder and delete content, list contact messages, upload images. Needs `Authorization: Bearer <token>` |
-| `POST /api/v1/predict`, `GET /api/v1/health` | ML predictor and its self-check (see Known limitations) |
 | `POST /api/v1/admin/complete` | Note autocomplete: `{"prefix", "title", "noteId"}` → `{"id", "suggestion"}` (empty when the model is unsure or unavailable). Admin only |
 | `POST /api/v1/admin/complete/{id}/feedback` | `{"outcome": "accepted" \| "rejected" \| "ignored", "acceptedChars"}`, recorded once per suggestion |
 
@@ -170,7 +167,7 @@ Lists return `{"data": [...], "pagination": {"total", "limit", "offset", "hasMor
 
 ## Known Limitations
 
-- **The ML predictor does not work in production.** The production image ships no model file (`ml/model/` holds only examples), so `POST /api/v1/predict` fails and `GET /api/v1/health`, which runs a real prediction as its check, returns `404 {"detail": "Unhealthy"}`. Use `/health` for liveness.
+- The `request_logs` table is left over from a removed ML predictor. It is empty and unused; the model stays only so Alembic does not propose dropping it.
 
 ## Free Tier Limits
 

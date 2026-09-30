@@ -1,22 +1,12 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-import joblib
-from core.config import MEMOIZATION_FLAG, METRICS_PORT, REDIS_URL
+from core.config import METRICS_PORT, REDIS_URL
 from fastapi import FastAPI
 from loguru import logger
 from prometheus_client import start_http_server
 from redis.asyncio import Redis
 from services.rate_limit import RateLimiter
-
-
-def preload_model():
-    """
-    In order to load model on memory to each worker
-    """
-    from services.predict import MachineLearningModelHandlerScore
-
-    MachineLearningModelHandlerScore.get_model(joblib.load)
 
 
 def connect_redis(url: str) -> Redis:
@@ -33,8 +23,6 @@ def connect_redis(url: str) -> Redis:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    if MEMOIZATION_FLAG:
-        preload_model()
     if METRICS_PORT:
         start_http_server(METRICS_PORT)
 

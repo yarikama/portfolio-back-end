@@ -14,7 +14,6 @@ DEBUG: bool = config("DEBUG", cast=bool, default=False)
 MAX_CONNECTIONS_COUNT: int = config("MAX_CONNECTIONS_COUNT", cast=int, default=10)
 MIN_CONNECTIONS_COUNT: int = config("MIN_CONNECTIONS_COUNT", cast=int, default=10)
 SECRET_KEY: Secret = config("SECRET_KEY", cast=Secret, default="")
-MEMOIZATION_FLAG: bool = config("MEMOIZATION_FLAG", cast=bool, default=True)
 DATABASE_URL: str = config("DATABASE_URL", default="sqlite:///./app.db")
 
 PROJECT_NAME: str = config("PROJECT_NAME", default="Portfolio-Back-End")
@@ -40,9 +39,6 @@ logging.basicConfig(
 )
 logger.configure(handlers=[{"sink": sys.stderr, "level": LOGGING_LEVEL}])
 
-MODEL_PATH = config("MODEL_PATH", default="./ml/model/")
-MODEL_NAME = config("MODEL_NAME", default="model.pkl")
-INPUT_EXAMPLE = config("INPUT_EXAMPLE", default="./ml/model/examples/example.json")
 
 # R2 Storage configuration
 R2_ACCOUNT_ID: str = config("R2_ACCOUNT_ID", default="")

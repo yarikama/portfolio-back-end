@@ -35,7 +35,6 @@ RUN uv export --locked --no-emit-project -o /tmp/requirements.txt \
     && uv pip install --no-cache -r /tmp/requirements.txt
 
 COPY ./app ./
-COPY ./ml/model ./ml/model
 
 # Run as an unprivileged user. A numeric UID lets Kubernetes verify
 # runAsNonRoot without having to look the name up in /etc/passwd.

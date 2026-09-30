@@ -7,14 +7,6 @@ ifeq ($(TIMEOUT),)
 TIMEOUT := 60
 endif
 
-ifeq ($(MODEL_PATH),)
-MODEL_PATH := ./ml/model/
-endif
-
-ifeq ($(MODEL_NAME),)
-MODEL_NAME := model.pkl
-endif
-
 ENV ?= local
 ENV_FILE := .env.${ENV}
 
