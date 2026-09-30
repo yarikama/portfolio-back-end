@@ -46,19 +46,24 @@ class Limited:
             await self._limiter.reset(self._rule, self.client)
 
 
-def rate_limit(rule: Rule, what: str) -> Callable[[Request], Awaitable[Limited]]:
+def rate_limit(
+    rule: Rule, what: str, client: Optional[str] = None
+) -> Callable[[Request], Awaitable[Limited]]:
     """
     A dependency that counts the request against `rule` and answers 429 once
-    the client is over it (`what` names the requests in the message).
+    the client is over it (`what` names the requests in the message). A
+    fixed `client` counts every request against one shared limit.
     """
 
     async def check(request: Request) -> Limited:
         limiter = get_rate_limiter(request.app)
-        client = client_id(request.headers, request.client and request.client.host)
+        who = client or client_id(
+            request.headers, request.client and request.client.host
+        )
         if limiter is None:
-            return Limited(None, rule, client)
+            return Limited(None, rule, who)
         try:
-            decision = await limiter.hit(rule, client)
+            decision = await limiter.hit(rule, who)
         except LimiterUnavailableError as error:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -67,6 +72,6 @@ def rate_limit(rule: Rule, what: str) -> Callable[[Request], Awaitable[Limited]]
             ) from error
         if not decision.allowed:
             raise too_many_requests(decision, what)
-        return Limited(limiter, rule, client)
+        return Limited(limiter, rule, who)
 
     return check

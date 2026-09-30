@@ -1,4 +1,5 @@
 from api.routes import (
+    ask,
     auth,
     autocomplete,
     categories,
@@ -17,3 +18,4 @@ router.include_router(lab_notes.router, tags=["lab-notes"], prefix="/v1")
 router.include_router(contact.router, tags=["contact"], prefix="/v1")
 router.include_router(upload.router, tags=["upload"], prefix="/v1")
 router.include_router(autocomplete.router, tags=["autocomplete"], prefix="/v1")
+router.include_router(ask.router, tags=["ask"], prefix="/v1")
