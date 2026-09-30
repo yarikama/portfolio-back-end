@@ -1,24 +1,10 @@
 import pytest
-import services.predict as predict
 from core import events
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from main import get_application
-
-
-def test_preload_model(monkeypatch):
-    called = {}
-
-    def fake_get_model(cls, loader):
-        called["called"] = True
-
-    monkeypatch.setattr(
-        predict.MachineLearningModelHandlerScore,
-        "get_model",
-        classmethod(fake_get_model),
-    )
-    events.preload_model()
-    assert called.get("called") is True
+from services.rate_limit import RateLimiter
+from starlette.datastructures import Secret
 
 
 @pytest.fixture
@@ -27,19 +13,22 @@ def anyio_backend():
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize("memoize", [True, False])
-async def test_lifespan_preloads_model_only_when_memoizing(monkeypatch, memoize):
-    called = {}
+async def test_lifespan_without_redis_leaves_requests_unlimited(monkeypatch):
+    monkeypatch.setattr(events, "REDIS_URL", Secret(""))
+    app = FastAPI()
 
-    def fake_preload():
-        called["called"] = True
+    async with events.lifespan(app):
+        assert getattr(app.state, "rate_limiter", None) is None
 
-    monkeypatch.setattr(events, "preload_model", fake_preload)
-    monkeypatch.setattr(events, "MEMOIZATION_FLAG", memoize)
 
-    async with events.lifespan(FastAPI()):
-        pass
-    assert called.get("called", False) is memoize
+@pytest.mark.anyio
+async def test_lifespan_with_redis_sets_up_the_rate_limiter(monkeypatch):
+    # Connecting is lazy: nothing listens here, and nothing needs to.
+    monkeypatch.setattr(events, "REDIS_URL", Secret("redis://127.0.0.1:1/0"))
+    app = FastAPI()
+
+    async with events.lifespan(app):
+        assert isinstance(app.state.rate_limiter, RateLimiter)
 
 
 def test_get_application():
@@ -52,3 +41,10 @@ def test_health_returns_ok():
     resp = client.get("/health")
     assert resp.status_code == 200
     assert resp.json() == {"status": "ok"}
+
+
+def test_the_old_ml_predictor_is_gone():
+    client = TestClient(get_application())
+
+    assert client.post("/api/v1/predict", json={}).status_code == 404
+    assert client.get("/api/v1/health").status_code == 404

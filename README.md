@@ -124,12 +124,14 @@ app/
 | `SECRET_KEY` | JWT signing key; changing it logs everyone out | empty (set it) |
 | `ADMIN_USERNAME` | Admin login username | `admin` |
 | `ADMIN_PASSWORD_HASH` | bcrypt hash of the admin password (`make hash`) | empty (set it) |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | Token lifetime | `30` |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | Token lifetime | `120` |
 | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`, `R2_PUBLIC_URL` | Cloudflare R2, for image uploads | bucket `yarikama-portfolio-backend` |
 | `DEBUG` | Debug mode | `False` |
-| `MEMOIZATION_FLAG` | Load the ML model at startup | `True` (production sets `False`) |
-| `MODEL_PATH`, `MODEL_NAME` | Where the ML model is loaded from | `./ml/model/`, `model.pkl` |
 | `REDIS_URL` | Redis for rate limits, e.g. `redis://:password@host:6379/0`; empty turns rate limiting off | empty |
+| `SMTP_HOST`, `SMTP_PORT` | SMTP server (STARTTLS) for contact-form notifications | `smtp.gmail.com`, `587` |
+| `SMTP_USERNAME`, `SMTP_PASSWORD`, `CONTACT_NOTIFY_TO` | Sender account (for Gmail: the address and an app password) and who gets an email per contact message; any empty turns notifications off | empty |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP/HTTP endpoint for traces (e.g. Grafana Tempo, `http://tempo:4318`); empty turns tracing off. Requests, SQL, Redis and httpx calls become spans, and log lines inside a request end with `trace_id=...` | empty |
+| `OTEL_SERVICE_NAME` | Service name on the traces | `portfolio-backend` |
 | `METRICS_PORT` | Serve Prometheus metrics on this port (kept off the API port, so the public Ingress never exposes them); `0` turns them off | `0` |
 | `AUTOCOMPLETE_URL` | OpenAI-compatible completions server for note autocomplete; empty disables it (503) | empty |
 | `AUTOCOMPLETE_MODEL`, `AUTOCOMPLETE_MODEL_VERSION` | Model name to request, and the version recorded with each suggestion | `autocomplete`, `unknown` |
@@ -148,9 +150,8 @@ app/
 | `GET /api/v1/projects`, `GET /api/v1/projects/{slug}` | Published projects, in display order |
 | `GET /api/v1/lab-notes`, `GET /api/v1/lab-notes/{slug}`, `GET /api/v1/lab-notes/tags` | Published lab notes |
 | `GET /api/v1/categories` | Project categories |
-| `POST /api/v1/contact` | Submit the contact form |
+| `POST /api/v1/contact` | Submit the contact form; the owner gets an email with the message (reply goes to the visitor) |
 | `/api/v1/admin/...` | Create, edit, reorder and delete content, list contact messages, upload images. Needs `Authorization: Bearer <token>` |
-| `POST /api/v1/predict`, `GET /api/v1/health` | ML predictor and its self-check (see Known limitations) |
 | `POST /api/v1/admin/complete` | Note autocomplete: `{"prefix", "title", "noteId"}` → `{"id", "suggestion"}` (empty when the model is unsure or unavailable). Admin only |
 | `POST /api/v1/admin/complete/{id}/feedback` | `{"outcome": "accepted" \| "rejected" \| "ignored", "acceptedChars"}`, recorded once per suggestion |
 
@@ -166,11 +167,19 @@ Per visitor (the `CF-Connecting-IP` address that Cloudflare sets; IPv6 grouped b
 
 Design and trade-offs: homelab `docs/11-rate-limiting.md`.
 
+### Image variants
+
+Uploaded JPEG, PNG and WebP images get WebP variants 640 and 1600 px wide (`<name>.w640.webp`, `<name>.w1600.webp`, never upscaled) from a background worker: the upload queues a job on a Redis Stream, and `python -m worker` (same image, `PYTHONPATH=app`) makes and stores them, retrying failed jobs and moving ones that keep failing to `jobs:images:dead`. On start and every hour it also queues any image still missing variants, which backfills old uploads and covers jobs lost when Redis restarts. The site loads variants with `srcset` and falls back to the original until they exist.
+
+### Caching
+
+`GET` on projects, lab notes and categories answers with an `ETag` and `Cache-Control: public, max-age=0, s-maxage=60, stale-while-revalidate=600`: browsers revalidate each time (a `304` when nothing changed), and Cloudflare keeps a copy for a minute. These responses carry `Access-Control-Allow-Origin: *`, because Cloudflare's cache ignores `Vary: Origin`. Edits in the admin show up publicly within about a minute.
+
 Lists return `{"data": [...], "pagination": {"total", "limit", "offset", "hasMore"}}` (categories: `data` only); single items return `{"data": {...}}`. Projects and lab notes use camelCase fields.
 
 ## Known Limitations
 
-- **The ML predictor does not work in production.** The production image ships no model file (`ml/model/` holds only examples), so `POST /api/v1/predict` fails and `GET /api/v1/health`, which runs a real prediction as its check, returns `404 {"detail": "Unhealthy"}`. Use `/health` for liveness.
+- The `request_logs` table is left over from a removed ML predictor. It is empty and unused; the model stays only so Alembic does not propose dropping it.
 
 ## Free Tier Limits
 
