@@ -305,3 +305,15 @@ async def test_admin_routes_and_preflights_are_not_counted(client, redis):
         )
 
     assert await redis.exists(RateLimiter.key(PUBLIC, "127.0.0.1")) == 0
+
+
+def test_every_counter_series_exists_from_the_start():
+    from prometheus_client import REGISTRY
+
+    for rule in ("login", "contact", "public"):
+        for decision in ("allowed", "rejected"):
+            labels = {"rule": rule, "decision": decision}
+            assert (
+                REGISTRY.get_sample_value("rate_limit_decisions_total", labels)
+                is not None
+            )

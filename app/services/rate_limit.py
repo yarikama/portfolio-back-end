@@ -61,6 +61,15 @@ CONTACT = Rule("contact", 3, 60 * 60, Algorithm.SLIDING_LOG, fail_open=True)
 # and one a second after that is far beyond a person browsing.
 PUBLIC = Rule("public", 60, 60, Algorithm.TOKEN_BUCKET, fail_open=True)
 
+# A labelled counter only exists after its first increment, and Prometheus's
+# increase() cannot see that first jump (there is no earlier sample): the
+# first login attack would never fire LoginRateLimited. Start every series
+# at 0 instead.
+for _rule in (LOGIN, CONTACT, PUBLIC):
+    ERRORS.labels(_rule.name)
+    for _decision in ("allowed", "rejected"):
+        DECISIONS.labels(_rule.name, _decision)
+
 
 @dataclass(frozen=True)
 class Decision:

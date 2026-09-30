@@ -79,6 +79,11 @@ class Worker:
         self.block_ms = block_ms
         self.last_error: dict[str, str] = {}
 
+    def start_metrics_at_zero(self) -> None:
+        # So increase() sees the first failure (see services.rate_limit).
+        for result in ("done", "failed", "dead"):
+            JOBS.labels(self.stream, result)
+
     async def ensure_group(self) -> None:
         # From "0": a new group also sees jobs added before it existed.
         try:
@@ -157,6 +162,7 @@ class Worker:
 
     async def run(self, stop: asyncio.Event) -> None:
         """Until stop is set; a job in progress always finishes first."""
+        self.start_metrics_at_zero()
         await self.ensure_group()
         while not stop.is_set():
             try:
