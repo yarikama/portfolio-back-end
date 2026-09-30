@@ -95,7 +95,9 @@ AUTOCOMPLETE_MIN_TOKEN_PROB: float = config(
 # the endpoint then answers 503. Design: homelab docs/14-ask-chat-plan.md.
 ASK_URL: str = config("ASK_URL", default="")
 ASK_MODEL: str = config("ASK_MODEL", default="ask")
-ASK_MAX_TOKENS: int = config("ASK_MAX_TOKENS", cast=int, default=400)
+# 400 cut a Chinese overview of his research mid-sentence: Chinese takes
+# about a token per character. 800 is about 14 s at 56 tokens/s.
+ASK_MAX_TOKENS: int = config("ASK_MAX_TOKENS", cast=int, default=800)
 ASK_TEMPERATURE: float = config("ASK_TEMPERATURE", cast=float, default=0.3)
 # The answer model's context (vLLM's --max-model-len). The system prompt,
 # which holds every published document, gets what the question and the

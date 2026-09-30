@@ -51,6 +51,10 @@ OUTPUT_TOKENS = Histogram(
     "Tokens in each answer.",
     buckets=(25, 50, 100, 200, 300, 400, 600),
 )
+TRUNCATED = Counter(
+    "ask_answers_truncated_total",
+    "Answers cut off at ASK_MAX_TOKENS.",
+)
 PROMPT_TOKENS = Gauge(
     "ask_prompt_tokens",
     "Estimated tokens in the system prompt: the rules and every document.",
@@ -271,6 +275,8 @@ class Answer:
         self.question = question
         self.text = ""
         self.output_tokens: Optional[int] = None
+        # The model hit ASK_MAX_TOKENS: the answer ends mid-sentence.
+        self.truncated = False
         self._client: Optional[httpx.AsyncClient] = None
         self._response: Optional[httpx.Response] = None
         self._sent = 0.0
@@ -321,6 +327,9 @@ class Answer:
             if chunk.get("usage"):
                 self.output_tokens = chunk["usage"].get("completion_tokens")
             for choice in chunk.get("choices", []):
+                if choice.get("finish_reason") == "length":
+                    self.truncated = True
+                    TRUNCATED.inc()
                 piece = (choice.get("delta") or {}).get("content") or ""
                 if not piece:
                     continue
