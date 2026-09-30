@@ -23,7 +23,7 @@ PROJECT_NAME: str = config("PROJECT_NAME", default="Portfolio-Back-End")
 ADMIN_USERNAME: str = config("ADMIN_USERNAME", default="admin")
 ADMIN_PASSWORD_HASH: str = config("ADMIN_PASSWORD_HASH", default="")
 ACCESS_TOKEN_EXPIRE_MINUTES: int = config(
-    "ACCESS_TOKEN_EXPIRE_MINUTES", cast=int, default=30
+    "ACCESS_TOKEN_EXPIRE_MINUTES", cast=int, default=120
 )
 
 # logging configuration
