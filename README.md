@@ -121,7 +121,7 @@ app/
 | `SECRET_KEY` | JWT signing key; changing it logs everyone out | empty (set it) |
 | `ADMIN_USERNAME` | Admin login username | `admin` |
 | `ADMIN_PASSWORD_HASH` | bcrypt hash of the admin password (`make hash`) | empty (set it) |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | Token lifetime | `30` |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | Token lifetime | `120` |
 | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`, `R2_PUBLIC_URL` | Cloudflare R2, for image uploads | bucket `yarikama-portfolio-backend` |
 | `DEBUG` | Debug mode | `False` |
 | `MEMOIZATION_FLAG` | Load the ML model at startup | `True` (production sets `False`) |
