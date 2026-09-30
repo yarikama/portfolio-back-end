@@ -163,6 +163,10 @@ Per visitor (the `CF-Connecting-IP` address that Cloudflare sets; IPv6 grouped b
 
 Design and trade-offs: homelab `docs/11-rate-limiting.md`.
 
+### Caching
+
+`GET` on projects, lab notes and categories answers with an `ETag` and `Cache-Control: public, max-age=0, s-maxage=60, stale-while-revalidate=600`: browsers revalidate each time (a `304` when nothing changed), and Cloudflare keeps a copy for a minute. These responses carry `Access-Control-Allow-Origin: *`, because Cloudflare's cache ignores `Vary: Origin`. Edits in the admin show up publicly within about a minute.
+
 Lists return `{"data": [...], "pagination": {"total", "limit", "offset", "hasMore"}}` (categories: `data` only); single items return `{"data": {...}}`. Projects and lab notes use camelCase fields.
 
 ## Known Limitations

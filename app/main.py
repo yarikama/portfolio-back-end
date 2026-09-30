@@ -1,3 +1,4 @@
+from api.cache import PublicCacheMiddleware
 from api.middleware import PublicRateLimitMiddleware
 from api.routes.api import router as api_router
 from api.routes.health import router as health_router
@@ -39,6 +40,8 @@ def get_application() -> FastAPI:
         # Lets the site read how long to wait after a 429.
         expose_headers=["Retry-After"],
     )
+    # Outermost: rewrites what CORS added on responses Cloudflare may cache.
+    application.add_middleware(PublicCacheMiddleware)
 
     application.include_router(health_router)
     application.include_router(api_router, prefix=API_PREFIX)
