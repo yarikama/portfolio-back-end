@@ -1,7 +1,7 @@
 import logging
 import sys
 
-from core.logging import InterceptHandler
+from core.logging import FORMAT, InterceptHandler, add_trace_id
 from loguru import logger
 from starlette.config import Config
 from starlette.datastructures import Secret
@@ -22,7 +22,7 @@ PROJECT_NAME: str = config("PROJECT_NAME", default="Portfolio-Back-End")
 ADMIN_USERNAME: str = config("ADMIN_USERNAME", default="admin")
 ADMIN_PASSWORD_HASH: str = config("ADMIN_PASSWORD_HASH", default="")
 ACCESS_TOKEN_EXPIRE_MINUTES: int = config(
-    "ACCESS_TOKEN_EXPIRE_MINUTES", cast=int, default=30
+    "ACCESS_TOKEN_EXPIRE_MINUTES", cast=int, default=120
 )
 
 # Rate limits (services.rate_limit) are kept in Redis, e.g.
@@ -46,7 +46,10 @@ LOGGING_LEVEL = logging.DEBUG if DEBUG else logging.INFO
 logging.basicConfig(
     handlers=[InterceptHandler(level=LOGGING_LEVEL)], level=LOGGING_LEVEL
 )
-logger.configure(handlers=[{"sink": sys.stderr, "level": LOGGING_LEVEL}])
+logger.configure(
+    handlers=[{"sink": sys.stderr, "level": LOGGING_LEVEL, "format": FORMAT}],
+    patcher=add_trace_id,
+)
 
 
 # R2 Storage configuration
