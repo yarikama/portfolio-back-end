@@ -9,13 +9,13 @@ from redis.asyncio import Redis
 from services.rate_limit import RateLimiter
 
 
-def connect_redis(url: str) -> Redis:
+def connect_redis(url: str, socket_timeout: float = 0.25) -> Redis:
     # Redis answers in well under a millisecond in the cluster. Short
     # timeouts keep a hung Redis from holding requests: the check fails and
     # the rule's fail-open or fail-closed choice decides instead.
     return Redis.from_url(
         url,
-        socket_timeout=0.25,
+        socket_timeout=socket_timeout,
         socket_connect_timeout=0.25,
         health_check_interval=30,
     )
@@ -29,6 +29,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     redis = None
     if str(REDIS_URL):
         redis = connect_redis(str(REDIS_URL))
+        app.state.redis = redis
         app.state.rate_limiter = RateLimiter(redis)
     else:
         logger.warning("REDIS_URL is not set: requests are not rate limited")

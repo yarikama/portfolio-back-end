@@ -167,6 +167,10 @@ Per visitor (the `CF-Connecting-IP` address that Cloudflare sets; IPv6 grouped b
 
 Design and trade-offs: homelab `docs/11-rate-limiting.md`.
 
+### Image variants
+
+Uploaded JPEG, PNG and WebP images get WebP variants 640 and 1600 px wide (`<name>.w640.webp`, `<name>.w1600.webp`, never upscaled) from a background worker: the upload queues a job on a Redis Stream, and `python -m worker` (same image, `PYTHONPATH=app`) makes and stores them, retrying failed jobs and moving ones that keep failing to `jobs:images:dead`. On start and every hour it also queues any image still missing variants, which backfills old uploads and covers jobs lost when Redis restarts. The site loads variants with `srcset` and falls back to the original until they exist.
+
 ### Caching
 
 `GET` on projects, lab notes and categories answers with an `ETag` and `Cache-Control: public, max-age=0, s-maxage=60, stale-while-revalidate=600`: browsers revalidate each time (a `304` when nothing changed), and Cloudflare keeps a copy for a minute. These responses carry `Access-Control-Allow-Origin: *`, because Cloudflare's cache ignores `Vary: Origin`. Edits in the admin show up publicly within about a minute.

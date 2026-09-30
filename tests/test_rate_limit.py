@@ -4,14 +4,12 @@ and against a real Redis when REDIS_TEST_URL points at one (CI does).
 """
 
 import asyncio
-import os
 import uuid
 
 import pytest
 from core import config
 from core.security import get_password_hash
 from db.dependency import get_db
-from fakeredis import FakeAsyncRedis
 from httpx import ASGITransport, AsyncClient
 from main import get_application
 from redis.asyncio import Redis
@@ -26,21 +24,6 @@ from services.rate_limit import (
 )
 
 pytestmark = pytest.mark.anyio
-
-
-@pytest.fixture
-def anyio_backend():
-    return "asyncio"
-
-
-@pytest.fixture
-async def redis():
-    url = os.environ.get("REDIS_TEST_URL")
-    client = Redis.from_url(url) if url else FakeAsyncRedis()
-    await client.flushdb()
-    yield client
-    await client.flushdb()
-    await client.aclose()
 
 
 class Clock:
