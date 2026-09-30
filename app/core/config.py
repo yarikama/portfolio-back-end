@@ -89,3 +89,18 @@ AUTOCOMPLETE_PRESENCE_PENALTY: float = config(
 AUTOCOMPLETE_MIN_TOKEN_PROB: float = config(
     "AUTOCOMPLETE_MIN_TOKEN_PROB", cast=float, default=0.5
 )
+
+# "Ask about my work" chat: an OpenAI-compatible chat server with an
+# instruct model (vLLM in the homelab cluster). Empty disables the feature;
+# the endpoint then answers 503. Design: homelab docs/14-ask-chat-plan.md.
+ASK_URL: str = config("ASK_URL", default="")
+ASK_MODEL: str = config("ASK_MODEL", default="ask")
+ASK_MAX_TOKENS: int = config("ASK_MAX_TOKENS", cast=int, default=400)
+ASK_TEMPERATURE: float = config("ASK_TEMPERATURE", cast=float, default=0.3)
+# The answer model's context (vLLM's --max-model-len). The system prompt,
+# which holds every published document, gets what the question and the
+# answer leave; past that the oldest documents are left out.
+ASK_CONTEXT_TOKENS: int = config("ASK_CONTEXT_TOKENS", cast=int, default=16384)
+# Answers generated at once; one more gets 503 at once instead of waiting
+# behind them on a GPU that cannot go any faster.
+ASK_MAX_CONCURRENT: int = config("ASK_MAX_CONCURRENT", cast=int, default=4)

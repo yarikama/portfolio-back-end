@@ -60,12 +60,18 @@ CONTACT = Rule("contact", 3, 60 * 60, Algorithm.SLIDING_LOG, fail_open=True)
 # Every other public request. A page load makes a few API calls; 60 at once
 # and one a second after that is far beyond a person browsing.
 PUBLIC = Rule("public", 60, 60, Algorithm.TOKEN_BUCKET, fail_open=True)
+# Questions for the chat, each a few seconds of GPU: per visitor, and for
+# the whole site (counted against the single client ASK_ALL_CLIENTS), so
+# many visitors together cannot keep the GPU busy all day either.
+ASK = Rule("ask", 10, 60 * 60, Algorithm.SLIDING_LOG, fail_open=True)
+ASK_ALL = Rule("ask_all", 500, 24 * 60 * 60, Algorithm.TOKEN_BUCKET, fail_open=True)
+ASK_ALL_CLIENTS = "all"
 
 # A labelled counter only exists after its first increment, and Prometheus's
 # increase() cannot see that first jump (there is no earlier sample): the
 # first login attack would never fire LoginRateLimited. Start every series
 # at 0 instead.
-for _rule in (LOGIN, CONTACT, PUBLIC):
+for _rule in (LOGIN, CONTACT, PUBLIC, ASK, ASK_ALL):
     ERRORS.labels(_rule.name)
     for _decision in ("allowed", "rejected"):
         DECISIONS.labels(_rule.name, _decision)
