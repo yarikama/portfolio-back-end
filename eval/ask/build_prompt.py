@@ -12,11 +12,14 @@ same instant.
 
 import json
 import subprocess
+import sys
 from datetime import date
 from types import SimpleNamespace
 
 from core import config
 from services import ask
+
+LIMIT = 100  # the API's page size cap
 
 API = "https://api.yarikama.com/api/v1"
 
@@ -32,9 +35,13 @@ def get(path: str):
 
 def main() -> None:
     projects = sorted(
-        get("/projects?limit=100"), key=lambda p: (p["createdAt"], p["id"])
+        get(f"/projects?limit={LIMIT}"), key=lambda p: (p["createdAt"], p["id"])
     )
-    notes = sorted(get("/lab-notes?limit=100"), key=lambda n: (n["createdAt"], n["id"]))
+    notes = sorted(
+        get(f"/lab-notes?limit={LIMIT}"), key=lambda n: (n["createdAt"], n["id"])
+    )
+    if LIMIT in (len(projects), len(notes)):
+        sys.exit("More than one page of content: paginate before trusting this.")
 
     project_docs = []
     for p in projects:
@@ -62,6 +69,10 @@ def main() -> None:
         note_docs.append((obj, ask._note_text(obj)))
 
     prompt, sources = ask._render(project_docs, note_docs)
+    if ask.estimate_tokens(prompt) > ask.prompt_budget():
+        # Production would leave the oldest documents out (build_snapshot)
+        # and renumber the rest; this prompt would no longer match it.
+        sys.exit("The prompt is over its budget: production would drop documents.")
     # Sources by slug, to check each answer's citations against the
     # evaluation set's expected sources.
     slugs = {"R1": "resume"}
@@ -78,7 +89,7 @@ def main() -> None:
             "max_tokens": config.ASK_MAX_TOKENS,
             "temperature": config.ASK_TEMPERATURE,
         },
-        __import__("sys").stdout,
+        sys.stdout,
         ensure_ascii=False,
     )
 

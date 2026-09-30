@@ -62,7 +62,9 @@ def ask(base, prompt, question):
                 if piece and first is None:
                     first = time.perf_counter() - sent
                 text += piece
-    return text, first, time.perf_counter() - sent, usage
+    total = time.perf_counter() - sent
+    # An empty answer has no first token; count it as arriving at the end.
+    return text, total if first is None else first, total, usage
 
 
 def score(q, answer, sources):
@@ -138,7 +140,8 @@ def summarize(results):
         f"first token p50 {firsts[len(firsts) // 2]:.2f}s"
         f"  p90 {firsts[int(len(firsts) * 0.9)]:.2f}s"
     )
-    print(f"tokens/answer {out / len(results):.0f}  decode {out / decoding:.0f} tok/s")
+    speed = out / decoding if decoding else 0
+    print(f"tokens/answer {out / len(results):.0f}  decode {speed:.0f} tok/s")
     print(
         f"answerable: cited expected {rate(answers, 'cited_expected'):.0%},"
         f" cited any {rate(answers, 'cited_any'):.0%}"

@@ -1,15 +1,16 @@
-from pydantic import Field, field_validator
+from typing import Annotated
+
+from pydantic import StringConstraints
 from schemas.base import BaseSchema
 from services.ask import MAX_QUESTION_CHARS
 
 
 class AskRequest(BaseSchema):
-    question: str = Field(..., min_length=1, max_length=MAX_QUESTION_CHARS)
-
-    @field_validator("question")
-    @classmethod
-    def not_blank(cls, value: str) -> str:
-        value = value.strip()
-        if not value:
-            raise ValueError("Ask a question.")
-        return value
+    # Stripped before the length checks: surrounding whitespace neither
+    # counts toward the limit nor makes a blank question valid.
+    question: Annotated[
+        str,
+        StringConstraints(
+            strip_whitespace=True, min_length=1, max_length=MAX_QUESTION_CHARS
+        ),
+    ]

@@ -16,11 +16,10 @@ import time
 from collections.abc import AsyncIterator
 from dataclasses import asdict
 
-import httpx
 from api.dependencies.rate_limit import rate_limit
 from core import config
 from db.dependency import get_db
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from loguru import logger
 from schemas.ask import AskRequest
@@ -54,25 +53,45 @@ def event(name: str, data: dict) -> str:
     return f"event: {name}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
-@router.post(
-    "/ask",
-    # The visitor's own limit first: a visitor over it does not use up the
-    # site's daily budget.
-    dependencies=[
-        Depends(rate_limit(ASK, "questions")),
-        Depends(
-            rate_limit(ASK_ALL, "questions on the site today", client=ASK_ALL_CLIENTS)
-        ),
-    ],
-)
-async def ask(body: AskRequest, db: Session = Depends(get_db)):
-    slots = generating()
-    if slots.locked():
-        REQUESTS.labels("busy").inc()
-        raise unavailable("Busy answering other questions. Try again shortly.", 10)
+# The visitor's own limit first: a visitor over it does not use up the
+# site's daily budget.
+ask_limit = rate_limit(ASK, "questions")
+site_limit = rate_limit(ASK_ALL, "questions on the site today", client=ASK_ALL_CLIENTS)
 
-    answer = Answer(snapshot(db), body.question)
-    events = stream(answer, slots)
+
+def offline() -> HTTPException:
+    return unavailable("The assistant is offline right now. Try again later.", 60)
+
+
+def busy() -> HTTPException:
+    REQUESTS.labels("busy").inc()
+    return unavailable("Busy answering other questions. Try again shortly.", 10)
+
+
+@router.post("/ask")
+async def ask(body: AskRequest, request: Request, db: Session = Depends(get_db)):
+    # The limits are counted here, not as route dependencies, so questions
+    # refused before reaching the model do not use them up: malformed (422,
+    # checked before this runs), switched off, or all slots busy. A visitor
+    # retrying while the GPU is busy is not locked out for the hour.
+    slots = generating()
+    if not config.ASK_URL:
+        REQUESTS.labels("unavailable").inc()
+        raise offline()
+    if slots.locked():
+        raise busy()
+    await ask_limit(request)
+    await site_limit(request)
+    if slots.locked():  # taken while the limits were checked
+        raise busy()
+
+    snap = snapshot(db)
+    # Done with the database. The session would otherwise keep its pooled
+    # connection, idle in a transaction, until the answer finishes
+    # streaming: a yield dependency is only torn down after the response.
+    db.close()
+
+    events = stream(Answer(snap, body.question), slots)
     try:
         # Runs the stream up to its connection to the model, so a model
         # that is down is still a plain 503 rather than a broken stream.
@@ -80,9 +99,7 @@ async def ask(body: AskRequest, db: Session = Depends(get_db)):
     except ModelUnavailableError as error:
         REQUESTS.labels("unavailable").inc()
         logger.warning(f"Ask: model unavailable: {error}")
-        raise unavailable(
-            "The assistant is offline right now. Try again later.", 60
-        ) from error
+        raise offline() from error
 
     return StreamingResponse(
         events,
@@ -115,7 +132,15 @@ async def stream(answer: Answer, slots: asyncio.Semaphore) -> AsyncIterator[str]
                 f"{answer.output_tokens} tokens, cited "
                 f"{[s.id for s in citations]}: {answer.question!r}"
             )
-        except (httpx.HTTPError, ValueError) as error:
+        except ModelUnavailableError:
+            raise  # before the first byte: the route answers 503
+        except asyncio.CancelledError:
+            # The visitor left; there is no one to send an event to.
+            REQUESTS.labels("cancelled").inc()
+            raise
+        except Exception as error:
+            # Whatever broke (the model, the connection, a malformed chunk),
+            # the visitor gets an error event rather than a dropped stream.
             REQUESTS.labels("error").inc()
             logger.error(f"Ask: answer broke off: {error!r}")
             yield event("error", {"detail": "The answer broke off. Try again."})

@@ -51,7 +51,6 @@ OUTPUT_TOKENS = Histogram(
     "Tokens in each answer.",
     buckets=(25, 50, 100, 200, 300, 400, 600),
 )
-# Limited questions are counted by rate_limit_decisions_total{rule="ask"}.
 PROMPT_TOKENS = Gauge(
     "ask_prompt_tokens",
     "Estimated tokens in the system prompt: the rules and every document.",
@@ -65,7 +64,9 @@ DROPPED = Gauge(
     "ask_documents_dropped",
     "Documents left out of the prompt because it was over its budget.",
 )
-for _result in ("answered", "busy", "unavailable", "error"):
+# Limited questions are counted by rate_limit_decisions_total{rule="ask"};
+# cancelled: the visitor left before the answer was complete.
+for _result in ("answered", "busy", "unavailable", "error", "cancelled"):
     REQUESTS.labels(_result)
 
 # Tests swap in an httpx.MockTransport.
@@ -314,6 +315,9 @@ class Answer:
             if not line.startswith("data: ") or line == "data: [DONE]":
                 continue
             chunk = json.loads(line[len("data: ") :])
+            if chunk.get("error"):
+                # vLLM reports a failure mid-stream as a chunk of its own.
+                raise ValueError(f"model error: {chunk['error']}")
             if chunk.get("usage"):
                 self.output_tokens = chunk["usage"].get("completion_tokens")
             for choice in chunk.get("choices", []):

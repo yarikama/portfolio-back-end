@@ -261,10 +261,18 @@ def model(monkeypatch):
     return serve
 
 
+class FakeSession:
+    closed = False
+
+    def close(self):
+        FakeSession.closed = True
+
+
 @pytest.fixture
 def app():
+    FakeSession.closed = False
     application = get_application()
-    application.dependency_overrides[get_db] = lambda: None
+    application.dependency_overrides[get_db] = FakeSession
     return application
 
 
@@ -306,6 +314,35 @@ def test_the_answer_streams_then_lists_what_it_cited(model, client):
     ]
     assert request["stream"] is True
     assert request["chat_template_kwargs"] == {"enable_thinking": False}
+
+
+def test_the_database_session_is_released_before_streaming(model, client):
+    # Otherwise its pooled connection stays checked out for the whole answer.
+    model(model_stream(["Hi."]))
+    client.post("/api/v1/ask", json={"question": "Hi?"})
+    assert FakeSession.closed
+
+
+def test_a_model_error_mid_stream_ends_with_an_error_event(model, client):
+    model(
+        'data: {"choices": [{"delta": {"content": "He "}}]}\n\n'
+        'data: {"error": {"message": "engine died"}}\n\ndata: [DONE]\n\n'
+    )
+
+    got = events(client.post("/api/v1/ask", json={"question": "Hi?"}).text)
+
+    assert got[-1][0] == "error"
+    assert "done" not in [name for name, _ in got]
+
+
+def test_whitespace_around_a_question_does_not_count_toward_its_length(model, client):
+    sent = model(model_stream(["Hi."]))
+    question = "x" * ask.MAX_QUESTION_CHARS
+
+    response = client.post("/api/v1/ask", json={"question": f"  {question} \n"})
+
+    assert response.status_code == 200
+    assert sent["json"]["messages"][-1]["content"] == question
 
 
 def test_a_generation_slot_is_returned_after_each_answer(model, client, monkeypatch):
@@ -395,6 +432,31 @@ async def test_a_visitor_gets_ten_questions_an_hour(model, limited_client):
 
 
 @pytest.mark.anyio
+async def test_refused_questions_do_not_use_up_the_limits(
+    model, limited_client, monkeypatch, redis
+):
+    model(model_stream(["Hi."]))
+    headers = {"CF-Connecting-IP": "203.0.113.5"}
+
+    monkeypatch.setattr(ask_route, "_generating", asyncio.Semaphore(0))
+    busy = await limited_client.post(
+        "/api/v1/ask", json={"question": "Hi?"}, headers=headers
+    )
+    monkeypatch.setattr(ask_route, "_generating", None)
+    monkeypatch.setattr(config, "ASK_URL", "")
+    off = await limited_client.post(
+        "/api/v1/ask", json={"question": "Hi?"}, headers=headers
+    )
+    bad = await limited_client.post(
+        "/api/v1/ask", json={"question": ""}, headers=headers
+    )
+
+    assert (busy.status_code, off.status_code, bad.status_code) == (503, 503, 422)
+    assert await redis.exists(RateLimiter.key(ASK, "203.0.113.5")) == 0
+    assert await redis.exists(RateLimiter.key(ask_route.ASK_ALL, "all")) == 0
+
+
+@pytest.mark.anyio
 async def test_every_visitor_counts_against_the_daily_site_budget(
     model, limited_client, redis
 ):
@@ -412,7 +474,7 @@ async def test_every_visitor_counts_against_the_daily_site_budget(
 def test_every_ask_counter_series_exists_from_the_start():
     from prometheus_client import REGISTRY
 
-    for result in ("answered", "busy", "unavailable", "error"):
+    for result in ("answered", "busy", "unavailable", "error", "cancelled"):
         assert (
             REGISTRY.get_sample_value("ask_requests_total", {"result": result})
             is not None
