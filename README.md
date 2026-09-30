@@ -8,6 +8,7 @@ Yarikama's Portfolio Backend API - Built with FastAPI
 - **Database**: PostgreSQL 17 (CloudNativePG on k3s)
 - **ORM**: SQLAlchemy
 - **Migration**: Alembic
+- **Rate limiting**: Redis (Lua scripts)
 - **Package Manager**: uv
 - **Hosting**: k3s on a home server, exposed through Cloudflare Tunnel
 
@@ -55,6 +56,8 @@ DATABASE_URL=postgresql://postgres:postgres@localhost:5432/app make test
 ```
 
 Most tests are self-contained; `tests/test_project_order.py` needs a real PostgreSQL (it defaults to `localhost:5432/test_db`, which the compose database does not create, hence the `DATABASE_URL`). CI runs the suite on Python 3.10, 3.11 and 3.12 against a PostgreSQL service container.
+
+The rate-limit tests run their Lua scripts in fakeredis by default. Set `REDIS_TEST_URL=redis://localhost:6379/15` to run them against a real Redis instead (CI does); that database is flushed.
 
 ## Database
 
@@ -126,6 +129,8 @@ app/
 | `DEBUG` | Debug mode | `False` |
 | `MEMOIZATION_FLAG` | Load the ML model at startup | `True` (production sets `False`) |
 | `MODEL_PATH`, `MODEL_NAME` | Where the ML model is loaded from | `./ml/model/`, `model.pkl` |
+| `REDIS_URL` | Redis for rate limits, e.g. `redis://:password@host:6379/0`; empty turns rate limiting off | empty |
+| `METRICS_PORT` | Serve Prometheus metrics on this port (kept off the API port, so the public Ingress never exposes them); `0` turns them off | `0` |
 | `AUTOCOMPLETE_URL` | OpenAI-compatible completions server for note autocomplete; empty disables it (503) | empty |
 | `AUTOCOMPLETE_MODEL`, `AUTOCOMPLETE_MODEL_VERSION` | Model name to request, and the version recorded with each suggestion | `autocomplete`, `unknown` |
 | `AUTOCOMPLETE_MIN_TOKEN_PROB` | Suggestions stop at the first token less likely than this | `0.5` |
@@ -148,6 +153,18 @@ app/
 | `POST /api/v1/predict`, `GET /api/v1/health` | ML predictor and its self-check (see Known limitations) |
 | `POST /api/v1/admin/complete` | Note autocomplete: `{"prefix", "title", "noteId"}` → `{"id", "suggestion"}` (empty when the model is unsure or unavailable). Admin only |
 | `POST /api/v1/admin/complete/{id}/feedback` | `{"outcome": "accepted" \| "rejected" \| "ignored", "acceptedChars"}`, recorded once per suggestion |
+
+### Rate limits
+
+Per visitor (the `CF-Connecting-IP` address that Cloudflare sets; IPv6 grouped by /64), kept in Redis so every replica shares them. Over a limit the API answers `429` with `Retry-After` in seconds and a readable `detail`.
+
+| Rule | Limit | Algorithm | If Redis is down |
+|------|-------|-----------|------------------|
+| Login | 5 attempts per 15 minutes; a successful login clears the count | Sliding log | Refuse (`503`) |
+| Contact form | 3 messages per hour | Sliding log | Allow |
+| Every other `/api/` request except `/api/v1/admin/*` and preflights | Bursts of 60, then 1 per second | Token bucket | Allow |
+
+Design and trade-offs: homelab `docs/11-rate-limiting.md`.
 
 Lists return `{"data": [...], "pagination": {"total", "limit", "offset", "hasMore"}}` (categories: `data` only); single items return `{"data": {...}}`. Projects and lab notes use camelCase fields.
 

@@ -2,17 +2,23 @@ from typing import Optional
 from uuid import UUID
 
 from api.dependencies import CurrentAdmin
+from api.dependencies.rate_limit import rate_limit
 from core.paginator import offset_pagination
 from db.dependency import get_db
 from db.models.contact import ContactMessage
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from schemas.contact import ContactCreate, ContactResponse, ContactUpdate
+from services.rate_limit import CONTACT
 from sqlalchemy.orm import Session
 
 router = APIRouter()
 
 
-@router.post("/contact", status_code=201)
+@router.post(
+    "/contact",
+    status_code=201,
+    dependencies=[Depends(rate_limit(CONTACT, "messages"))],
+)
 async def create_contact(
     contact: ContactCreate,
     db: Session = Depends(get_db),

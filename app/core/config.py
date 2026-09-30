@@ -26,6 +26,13 @@ ACCESS_TOKEN_EXPIRE_MINUTES: int = config(
     "ACCESS_TOKEN_EXPIRE_MINUTES", cast=int, default=30
 )
 
+# Rate limits (services.rate_limit) are kept in Redis, e.g.
+# redis://:password@host:6379/0. Empty turns them off (local development).
+REDIS_URL: Secret = config("REDIS_URL", cast=Secret, default="")
+# Prometheus metrics on this port, separate from the API port so the public
+# Ingress never exposes them. 0 turns them off.
+METRICS_PORT: int = config("METRICS_PORT", cast=int, default=0)
+
 # logging configuration
 LOGGING_LEVEL = logging.DEBUG if DEBUG else logging.INFO
 logging.basicConfig(

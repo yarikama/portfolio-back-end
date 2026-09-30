@@ -11,6 +11,14 @@ services:
       - ./.env.local:/app/.env:ro
     depends_on:
       - db
+      - redis
+
+  # Rate limits; set REDIS_URL=redis://redis:6379/0 in .env.local to use it.
+  redis:
+    image: redis:8.10.2-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "6379:6379"
 
   db:
     image: postgres:16

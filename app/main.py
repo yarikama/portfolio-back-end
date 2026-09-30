@@ -1,3 +1,4 @@
+from api.middleware import PublicRateLimitMiddleware
 from api.routes.api import router as api_router
 from api.routes.health import router as health_router
 from core.config import API_PREFIX, DEBUG, PROJECT_NAME, VERSION
@@ -21,6 +22,8 @@ def get_application() -> FastAPI:
         "https://www.yarikama.com",
     ]
 
+    # Before CORS, so that CORS wraps it and its 429s carry CORS headers.
+    application.add_middleware(PublicRateLimitMiddleware)
     application.add_middleware(
         CORSMiddleware,
         allow_origins=origins,
@@ -33,6 +36,8 @@ def get_application() -> FastAPI:
         # Chrome's cap, and saves a round trip on the first autocomplete
         # request after every pause in writing.
         max_age=7200,
+        # Lets the site read how long to wait after a 429.
+        expose_headers=["Retry-After"],
     )
 
     application.include_router(health_router)
