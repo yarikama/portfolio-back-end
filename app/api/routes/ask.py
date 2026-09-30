@@ -3,7 +3,8 @@ POST /ask: a visitor's question about the owner's work, answered as a
 server-sent event stream:
 
     event: token   data: {"text": "..."}          a piece of the answer
-    event: done    data: {"citations": [...]}     the sources it cited
+    event: done    data: {"citations": [...],     the sources it cited, and
+                          "truncated": false}     whether it hit ASK_MAX_TOKENS
     event: error   data: {"detail": "..."}        the answer broke off
 
 Errors before the first token (limits, model down) are ordinary JSON
@@ -123,13 +124,20 @@ async def stream(answer: Answer, slots: asyncio.Semaphore) -> AsyncIterator[str]
             async for piece in answer.tokens():
                 yield event("token", {"text": piece})
             citations = cited(answer.text, answer.snapshot.sources)
-            yield event("done", {"citations": [asdict(s) for s in citations]})
+            yield event(
+                "done",
+                {
+                    "citations": [asdict(s) for s in citations],
+                    "truncated": answer.truncated,
+                },
+            )
             REQUESTS.labels("answered").inc()
             # The question is logged (Loki keeps it for its retention
             # period) to see what visitors ask; the visitor's address is not.
             logger.info(
                 f"Ask: answered in {time.perf_counter() - started:.1f}s, "
-                f"{answer.output_tokens} tokens, cited "
+                f"{answer.output_tokens} tokens"
+                f"{' (cut at the limit)' if answer.truncated else ''}, cited "
                 f"{[s.id for s in citations]}: {answer.question!r}"
             )
         except ModelUnavailableError:

@@ -137,7 +137,7 @@ app/
 | `AUTOCOMPLETE_MODEL`, `AUTOCOMPLETE_MODEL_VERSION` | Model name to request, and the version recorded with each suggestion | `autocomplete`, `unknown` |
 | `AUTOCOMPLETE_MIN_TOKEN_PROB` | Suggestions stop at the first token less likely than this | `0.5` |
 | `ASK_URL` | OpenAI-compatible chat server with an instruct model, for the "ask about my work" chat; empty disables it (503) | empty |
-| `ASK_MODEL`, `ASK_MAX_TOKENS`, `ASK_TEMPERATURE` | Model name to request, answer length cap, sampling temperature | `ask`, `400`, `0.3` |
+| `ASK_MODEL`, `ASK_MAX_TOKENS`, `ASK_TEMPERATURE` | Model name to request, answer length cap in tokens (Chinese takes about one per character), sampling temperature | `ask`, `800`, `0.3` |
 | `ASK_CONTEXT_TOKENS` | The answer model's context length (vLLM `--max-model-len`); the system prompt gets what the question and the answer leave | `16384` |
 | `ASK_MAX_CONCURRENT` | Answers generated at once; past this the API answers `503` right away | `4` |
 | `AUTOCOMPLETE_FREQUENCY_PENALTY`, `AUTOCOMPLETE_PRESENCE_PENALTY` | Discourage repeating what the suggestion itself already wrote (not the note); a suggestion is also cut where it starts repeating the text before it | `2.0`, `1.0` |
@@ -155,7 +155,7 @@ app/
 | `GET /api/v1/lab-notes`, `GET /api/v1/lab-notes/{slug}`, `GET /api/v1/lab-notes/tags` | Published lab notes |
 | `GET /api/v1/categories` | Project categories |
 | `POST /api/v1/contact` | Submit the contact form; the owner gets an email with the message (reply goes to the visitor) |
-| `POST /api/v1/ask` | `{"question"}` (up to 500 characters) → a server-sent event stream: `token` events `{"text"}`, then `done` `{"citations": [{"id", "kind", "title", "url"}]}`, or `error` `{"detail"}` if the answer breaks off. `503` when the model is offline or busy. See [Ask about my work](#ask-about-my-work) |
+| `POST /api/v1/ask` | `{"question"}` (up to 500 characters) → a server-sent event stream: `token` events `{"text"}`, then `done` `{"citations": [{"id", "kind", "title", "url"}], "truncated"}` (`truncated`: the answer hit `ASK_MAX_TOKENS` and ends mid-sentence), or `error` `{"detail"}` if the answer breaks off. `503` when the model is offline or busy. See [Ask about my work](#ask-about-my-work) |
 | `/api/v1/admin/...` | Create, edit, reorder and delete content, list contact messages, upload images. Needs `Authorization: Bearer <token>` |
 | `POST /api/v1/admin/complete` | Note autocomplete: `{"prefix", "title", "noteId"}` → `{"id", "suggestion"}` (empty when the model is unsure or unavailable). Admin only |
 | `POST /api/v1/admin/complete/{id}/feedback` | `{"outcome": "accepted" \| "rejected" \| "ignored", "acceptedChars"}`, recorded once per suggestion |

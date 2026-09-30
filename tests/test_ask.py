@@ -218,11 +218,12 @@ def test_citations_follow_first_mention_and_drop_made_up_ids():
 SNAPSHOT = ask.Snapshot(key=(), system_prompt="RULES AND DOCUMENTS", sources=SOURCES)
 
 
-def model_stream(pieces, usage=12):
+def model_stream(pieces, usage=12, finish="stop"):
     """A vLLM-style chat completions stream."""
     events = [
         {"choices": [{"delta": {"role": "assistant", "content": ""}}]},
         *({"choices": [{"delta": {"content": piece}}]} for piece in pieces),
+        {"choices": [{"delta": {}, "finish_reason": finish}]},
         {"choices": [], "usage": {"completion_tokens": usage}},
     ]
     return "".join(f"data: {json.dumps(e)}\n\n" for e in events) + "data: [DONE]\n\n"
@@ -304,7 +305,8 @@ def test_the_answer_streams_then_lists_what_it_cited(model, client):
                     "title": "PAPIT",
                     "url": "https://github.com/x/papit",
                 }
-            ]
+            ],
+            "truncated": False,
         },
     )
     request = sent["json"]
@@ -343,6 +345,15 @@ def test_whitespace_around_a_question_does_not_count_toward_its_length(model, cl
 
     assert response.status_code == 200
     assert sent["json"]["messages"][-1]["content"] == question
+
+
+def test_an_answer_cut_at_the_length_limit_says_so(model, client):
+    model(model_stream(["He built ", "PAPIT, which"], finish="length"))
+
+    got = events(client.post("/api/v1/ask", json={"question": "Everything?"}).text)
+
+    assert got[-1][0] == "done"
+    assert got[-1][1]["truncated"] is True
 
 
 def test_a_generation_slot_is_returned_after_each_answer(model, client, monkeypatch):
