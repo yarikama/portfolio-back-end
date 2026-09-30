@@ -1,8 +1,8 @@
-from typing import Annotated
+from typing import Annotated, Optional
 
 from pydantic import StringConstraints
 from schemas.base import BaseSchema
-from services.ask import MAX_QUESTION_CHARS
+from services.ask import MAX_QUESTION_CHARS, MAX_QUOTE_CHARS
 
 
 class AskRequest(BaseSchema):
@@ -14,3 +14,16 @@ class AskRequest(BaseSchema):
             strip_whitespace=True, min_length=1, max_length=MAX_QUESTION_CHARS
         ),
     ]
+    # A passage the visitor highlighted on the site, and the path of the
+    # page it is on, so the model knows which note or project it is from.
+    quote: Optional[
+        Annotated[
+            str,
+            StringConstraints(
+                strip_whitespace=True, min_length=1, max_length=MAX_QUOTE_CHARS
+            ),
+        ]
+    ] = None
+    page: Optional[
+        Annotated[str, StringConstraints(max_length=200, pattern=r"^/[\w\-./%]*$")]
+    ] = None
