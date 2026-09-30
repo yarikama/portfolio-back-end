@@ -10,6 +10,7 @@ docs/14-ask-chat-plan.md.
 """
 
 import json
+import math
 import re
 import time
 from collections.abc import AsyncIterator
@@ -21,12 +22,16 @@ import httpx
 from core import config
 from db.models.lab_notes import LabNote
 from db.models.projects import Project
-from prometheus_client import Counter, Histogram
+from loguru import logger
+from prometheus_client import Counter, Gauge, Histogram
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 RESUME = Path(__file__).resolve().parent.parent / "content" / "resume.md"
 MAX_QUESTION_CHARS = 500
+# Room kept in the context for the question and the chat template around
+# it: 500 characters of Chinese are about 500 tokens.
+QUESTION_TOKENS = 600
 # Long enough to connect and for the first token; after that each read
 # waits for the next token only.
 TIMEOUT = httpx.Timeout(30.0, connect=3.0)
@@ -47,6 +52,19 @@ OUTPUT_TOKENS = Histogram(
     buckets=(25, 50, 100, 200, 300, 400, 600),
 )
 # Limited questions are counted by rate_limit_decisions_total{rule="ask"}.
+PROMPT_TOKENS = Gauge(
+    "ask_prompt_tokens",
+    "Estimated tokens in the system prompt: the rules and every document.",
+)
+PROMPT_BUDGET = Gauge(
+    "ask_prompt_budget_tokens",
+    "Tokens the system prompt may use: the model's context minus the "
+    "question and the answer.",
+)
+DROPPED = Gauge(
+    "ask_documents_dropped",
+    "Documents left out of the prompt because it was over its budget.",
+)
 for _result in ("answered", "busy", "unavailable", "error"):
     REQUESTS.labels(_result)
 
@@ -131,25 +149,23 @@ def content_key(db: Session) -> tuple:
     return tuple(key)
 
 
-def build_snapshot(db: Session, key: tuple) -> Snapshot:
+def estimate_tokens(text: str) -> int:
     """
-    Only published content: a draft must never leak through the chat. The
-    order is fixed (by creation), so the prompt, and with it vLLM's prefix
-    cache, stays the same until the content changes.
+    Tokens in `text` for Qwen's tokenizer, without loading it: about 4
+    characters per token in English, about 1 per character in Chinese.
+    Estimated high (3.5 per token), to warn before the real limit, not after.
     """
-    projects = (
-        db.query(Project)
-        .filter(Project.published.is_(True))
-        .order_by(Project.created_at, Project.id)
-        .all()
-    )
-    notes = (
-        db.query(LabNote)
-        .filter(LabNote.published.is_(True))
-        .order_by(LabNote.created_at, LabNote.id)
-        .all()
-    )
+    wide = sum(1 for c in text if ord(c) >= 0x2E80)
+    return math.ceil((len(text) - wide) / 3.5 + wide)
 
+
+def prompt_budget() -> int:
+    return config.ASK_CONTEXT_TOKENS - config.ASK_MAX_TOKENS - QUESTION_TOKENS
+
+
+def _render(
+    projects: list[tuple[Project, str]], notes: list[tuple[LabNote, str]]
+) -> tuple[str, dict[str, Source]]:
     sources: dict[str, Source] = {}
     blocks: list[str] = []
 
@@ -158,14 +174,58 @@ def build_snapshot(db: Session, key: tuple) -> Snapshot:
         blocks.append(f'<document id="{source.id}">\n{text}\n</document>')
 
     add(Source("R1", "resume", "Resume", "/resume.pdf"), _resume_text())
-    for i, project in enumerate(projects, 1):
+    for i, (project, text) in enumerate(projects, 1):
         url = project.link or project.github or "/archive"
-        add(Source(f"P{i}", "project", project.title, url), _project_text(project))
-    for i, note in enumerate(notes, 1):
-        url = f"/notes/{note.slug}"
-        add(Source(f"N{i}", "note", note.title, url), _note_text(note))
+        add(Source(f"P{i}", "project", project.title, url), text)
+    for i, (note, text) in enumerate(notes, 1):
+        add(Source(f"N{i}", "note", note.title, f"/notes/{note.slug}"), text)
 
     prompt = f"{RULES}\n\n<documents>\n" + "\n\n".join(blocks) + "\n</documents>"
+    return prompt, sources
+
+
+def build_snapshot(db: Session, key: tuple) -> Snapshot:
+    """
+    Only published content: a draft must never leak through the chat. The
+    order is fixed (by creation), so the prompt, and with it vLLM's prefix
+    cache, stays the same until the content changes.
+
+    Everything goes in while it fits the model's context. Past that, the
+    oldest notes are left out first, then the oldest projects, so the chat
+    keeps working (with a warning and a metric) instead of every question
+    failing. The alert on the budget should come long before this: it is
+    the signal to switch to retrieval (homelab docs/14-ask-chat-plan.md).
+    """
+    projects = [
+        (p, _project_text(p))
+        for p in db.query(Project)
+        .filter(Project.published.is_(True))
+        .order_by(Project.created_at, Project.id)
+    ]
+    notes = [
+        (n, _note_text(n))
+        for n in db.query(LabNote)
+        .filter(LabNote.published.is_(True))
+        .order_by(LabNote.created_at, LabNote.id)
+    ]
+
+    budget = prompt_budget()
+    dropped: list[str] = []
+    prompt, sources = _render(projects, notes)
+    while estimate_tokens(prompt) > budget and (notes or projects):
+        document, _ = notes.pop(0) if notes else projects.pop(0)
+        dropped.append(document.title)
+        prompt, sources = _render(projects, notes)
+
+    tokens = estimate_tokens(prompt)
+    PROMPT_TOKENS.set(tokens)
+    PROMPT_BUDGET.set(budget)
+    DROPPED.set(len(dropped))
+    if dropped:
+        logger.warning(
+            f"Ask: prompt over its budget of {budget} tokens; left out "
+            f"{len(dropped)} documents, oldest first: {dropped}"
+        )
     return Snapshot(key=key, system_prompt=prompt, sources=sources)
 
 

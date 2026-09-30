@@ -145,6 +145,60 @@ def test_the_prompt_is_the_same_for_the_same_content(session_factory):
         )
 
 
+def test_token_estimate_counts_chinese_per_character():
+    assert ask.estimate_tokens("") == 0
+    assert ask.estimate_tokens("a" * 35) == 10
+    assert ask.estimate_tokens("研究") == 2
+    assert ask.estimate_tokens("GNN 研究") == 4  # 4 / 3.5 + 2, rounded up
+
+
+def test_prompt_size_and_budget_are_exported(session_factory, monkeypatch):
+    from prometheus_client import REGISTRY
+
+    monkeypatch.setattr(config, "ASK_CONTEXT_TOKENS", 16384)
+    monkeypatch.setattr(config, "ASK_MAX_TOKENS", 400)
+    with session_factory() as db:
+        snap = ask.build_snapshot(db, ask.content_key(db))
+
+    assert REGISTRY.get_sample_value("ask_prompt_tokens") == ask.estimate_tokens(
+        snap.system_prompt
+    )
+    assert REGISTRY.get_sample_value("ask_prompt_budget_tokens") == (
+        16384 - 400 - ask.QUESTION_TOKENS
+    )
+    assert REGISTRY.get_sample_value("ask_documents_dropped") == 0
+
+
+def test_over_budget_leaves_out_the_oldest_notes_then_projects(
+    session_factory, monkeypatch
+):
+    from prometheus_client import REGISTRY
+
+    with session_factory() as db:
+        add_project(db, "old-project")
+        add_note(db, "old-note")
+        add_note(db, "new-note")
+        full = ask.build_snapshot(db, ask.content_key(db))
+
+        def fit(tokens):
+            # A context that leaves exactly `tokens` for the system prompt.
+            monkeypatch.setattr(
+                config,
+                "ASK_CONTEXT_TOKENS",
+                tokens + config.ASK_MAX_TOKENS + ask.QUESTION_TOKENS,
+            )
+            return ask.build_snapshot(db, ask.content_key(db))
+
+        one_short = fit(ask.estimate_tokens(full.system_prompt) - 1)
+        titles = {s.title for s in one_short.sources.values()}
+        assert "Note old-note" not in titles
+        assert {"Note new-note", "Project old-project", "Resume"} <= titles
+        assert REGISTRY.get_sample_value("ask_documents_dropped") == 1
+
+        resume_only = fit(1)
+        assert set(resume_only.sources) == {"R1"}
+
+
 # ── citations ────────────────────────────────────────────────────────────────
 
 SOURCES = {
