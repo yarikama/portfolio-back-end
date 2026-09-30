@@ -186,7 +186,10 @@ def _render(
 
     add(Source("R1", "resume", "Resume", "/resume.pdf"), _resume_text())
     for i, (project, text) in enumerate(projects, 1):
-        url = project.link or project.github or "/works"
+        # Its card on the works page, whether or not it has a link of its
+        # own: the card carries those links, and the visitor stays on the
+        # site. The prompt still has the links, for questions about them.
+        url = f"/works#{project.slug}"
         add(Source(f"P{i}", "project", project.title, url), text)
     for i, (note, text) in enumerate(notes, 1):
         add(Source(f"N{i}", "note", note.title, f"/notes/{note.slug}"), text)

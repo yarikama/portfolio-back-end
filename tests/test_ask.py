@@ -99,7 +99,9 @@ def test_only_published_content_reaches_the_prompt(session_factory):
     assert "Project draft" not in snap.system_prompt
     assert "Body of draft-note." not in snap.system_prompt
     titles = {s.title: s for s in snap.sources.values()}
-    assert titles["Project public"].url == "https://example.com/public"
+    # Projects link to their card on the site, not to their own link.
+    assert titles["Project public"].url == f"/works#{PREFIX}public"
+    assert "Link: https://example.com/public" in snap.system_prompt
     assert titles["Note public-note"].url == f"/notes/{PREFIX}public-note"
     assert "Project draft" not in titles
 
