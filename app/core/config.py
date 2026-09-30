@@ -28,6 +28,15 @@ ACCESS_TOKEN_EXPIRE_MINUTES: int = config(
 # Rate limits (services.rate_limit) are kept in Redis, e.g.
 # redis://:password@host:6379/0. Empty turns them off (local development).
 REDIS_URL: Secret = config("REDIS_URL", cast=Secret, default="")
+# Email about new contact messages, over SMTP with STARTTLS (for Gmail: the
+# address and an app password). Any of user, password or recipient empty
+# turns it off; messages are still saved.
+SMTP_HOST: str = config("SMTP_HOST", default="smtp.gmail.com")
+SMTP_PORT: int = config("SMTP_PORT", cast=int, default=587)
+SMTP_USERNAME: str = config("SMTP_USERNAME", default="")
+SMTP_PASSWORD: Secret = config("SMTP_PASSWORD", cast=Secret, default="")
+CONTACT_NOTIFY_TO: str = config("CONTACT_NOTIFY_TO", default="")
+
 # Prometheus metrics on this port, separate from the API port so the public
 # Ingress never exposes them. 0 turns them off.
 METRICS_PORT: int = config("METRICS_PORT", cast=int, default=0)
