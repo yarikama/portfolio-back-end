@@ -17,3 +17,17 @@ The mix: 15 answerable questions in English, 10 in Chinese, 5 about proper
 nouns, 5 off-topic and 5 injection attempts.
 
 When site content changes, check that the `sources` and `points` still hold.
+
+## Running it
+
+`build_prompt.py` builds the system prompt from the live site with the
+backend's own rendering; `run.py` (standard library only) asks every
+question and scores citations, language and refusals. The homelab repo's
+`llm/eval/run_ask_candidate.sh` serves a candidate model and runs `run.py`
+inside its pod:
+
+```bash
+PYTHONPATH=app uv run python eval/ask/build_prompt.py > /tmp/prompt.json
+# in the homelab repo:
+llm/eval/run_ask_candidate.sh <hf model> <revision> <name> <this dir> /tmp/prompt.json [vllm args]
+```
