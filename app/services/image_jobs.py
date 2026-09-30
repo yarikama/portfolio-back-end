@@ -9,7 +9,7 @@ from typing import Protocol
 from loguru import logger
 from redis.asyncio import Redis
 from services.images import WIDTHS, is_original, make_variants, variant_key
-from services.jobs import enqueue
+from services.jobs import dead_letter_stream, decode, enqueue
 
 STREAM = "jobs:images"
 GROUP = "image-workers"
@@ -50,13 +50,26 @@ def missing_variants(keys: list[str]) -> list[str]:
     ]
 
 
+async def given_up(redis: Redis) -> set[str]:
+    """Keys whose jobs are in the dead-letter stream."""
+    entries = await redis.xrange(dead_letter_stream(STREAM))
+    return {decode(fields).get("key", "") for _, fields in entries}
+
+
 async def reconcile(storage: Storage, redis: Redis) -> int:
     """
     Queue every original whose variants are missing: images uploaded before
     the worker existed, and jobs lost because Redis keeps no data across a
     restart. Queuing one twice is harmless.
+
+    Images whose job already gave up (a corrupt file, say) are skipped: an
+    hourly retry would only fail the same way and dead-letter them again.
+    Clearing the dead-letter stream lets the next reconcile try them anew.
     """
-    missing = missing_variants(await storage.list_keys())
+    skipped = await given_up(redis)
+    missing = [
+        key for key in missing_variants(await storage.list_keys()) if key not in skipped
+    ]
     for key in missing:
         await enqueue_variants(redis, key)
     if missing:
