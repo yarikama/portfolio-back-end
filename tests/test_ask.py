@@ -109,7 +109,7 @@ def test_the_resume_is_in_the_prompt_without_private_details(session_factory):
         snap = ask.build_snapshot(db, ask.content_key(db))
 
     resume = snap.sources["R1"]
-    assert resume.kind == "resume" and resume.url is None
+    assert resume.kind == "resume" and resume.url == "/resume.pdf"
     assert "Rice University" in snap.system_prompt
     # The maintainer's comment at the top of the file stays out, and so does
     # the phone number from the LaTeX header.
@@ -148,7 +148,7 @@ def test_the_prompt_is_the_same_for_the_same_content(session_factory):
 # ── citations ────────────────────────────────────────────────────────────────
 
 SOURCES = {
-    "R1": ask.Source("R1", "resume", "Resume", None),
+    "R1": ask.Source("R1", "resume", "Resume", "/resume.pdf"),
     "P1": ask.Source("P1", "project", "PAPIT", "https://github.com/x/papit"),
     "N1": ask.Source("N1", "note", "SVD", "/notes/svd"),
 }

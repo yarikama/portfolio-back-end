@@ -157,7 +157,7 @@ def build_snapshot(db: Session, key: tuple) -> Snapshot:
         sources[source.id] = source
         blocks.append(f'<document id="{source.id}">\n{text}\n</document>')
 
-    add(Source("R1", "resume", "Resume", None), _resume_text())
+    add(Source("R1", "resume", "Resume", "/resume.pdf"), _resume_text())
     for i, project in enumerate(projects, 1):
         url = project.link or project.github or "/archive"
         add(Source(f"P{i}", "project", project.title, url), _project_text(project))
