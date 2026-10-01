@@ -25,7 +25,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from loguru import logger
 from schemas.ask import AskRequest
-from services import ask_log
+from services import ask_history, ask_log
 from services.ask import REQUESTS, Answer, ModelUnavailableError, snapshot
 from services.rate_limit import ASK, ASK_ALL, ASK_ALL_CLIENTS
 from sqlalchemy.orm import Session
@@ -110,7 +110,13 @@ async def ask(body: AskRequest, request: Request, db: Session = Depends(get_db))
     # streaming: a yield dependency is only torn down after the response.
     db.close()
 
-    events = stream(Answer(snap, body.question, body.quote, body.page), slots, admin)
+    # The conversation so far; an unknown or expired id starts a new one.
+    redis = getattr(request.app.state, "redis", None)
+    history = await ask_history.load(redis, body.conversation)
+    conversation = body.conversation if history else ask_history.new_id()
+
+    answer = Answer(snap, body.question, body.quote, body.page, history)
+    events = stream(answer, slots, admin, redis, conversation)
     try:
         # Runs the stream up to its connection to the model, so a model
         # that is down is still a plain 503 rather than a broken stream.
@@ -149,7 +155,11 @@ async def store(
 
 
 async def stream(
-    answer: Answer, slots: asyncio.Semaphore, admin: bool = False
+    answer: Answer,
+    slots: asyncio.Semaphore,
+    admin: bool = False,
+    redis=None,
+    conversation: str | None = None,
 ) -> AsyncIterator[str]:
     """
     The GPU slot and the model connection are taken inside the generator,
@@ -171,6 +181,8 @@ async def stream(
                 {
                     "citations": [asdict(s) for s in citations],
                     "truncated": answer.truncated,
+                    # Sent back with the next question to continue.
+                    "conversation": conversation,
                 },
             )
             REQUESTS.labels("answered").inc()
@@ -181,7 +193,9 @@ async def stream(
                 f"Ask{' (admin)' if admin else ''}: answered in "
                 f"{time.perf_counter() - started:.1f}s, "
                 f"{answer.output_tokens} tokens"
-                f"{' (cut at the limit)' if answer.truncated else ''}, cited "
+                f"{' (cut at the limit)' if answer.truncated else ''}"
+                f"{f', after {len(answer.history)} turns' if answer.history else ''}"
+                ", cited "
                 f"{[s.id for s in citations]}: {answer.question!r}"
                 + (
                     f" about a passage on {answer.page or '?'}: {answer.quote[:80]!r}"
@@ -190,6 +204,12 @@ async def stream(
                 )
             )
             await store(answer, citations, "answered", started, admin)
+            if conversation:
+                await ask_history.save(
+                    redis,
+                    conversation,
+                    ask_history.Turn(answer.question, answer.text, answer.page),
+                )
         except ModelUnavailableError:
             raise  # before the first byte: the route answers 503
         except asyncio.CancelledError:
