@@ -1,5 +1,5 @@
 [project]
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 name = "portfolio-back-end"
 version = "0.1.0"
 description = "Yarikama's Portfolio With Blogs"
@@ -38,13 +38,10 @@ dev = [
     "ipdb>=0.13.0",
     "fakeredis[lua]>=2.30",
 ]
-aws = [
-    "mangum>=0.17.0"
-]
 
 [tool.ruff]
 line-length = 88
-target-version = "py39"
+target-version = "py310"
 exclude = [".venv", "__pycache__", ".git", "alembic"]
 
 [tool.ruff.lint]

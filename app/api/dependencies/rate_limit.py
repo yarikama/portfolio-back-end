@@ -1,6 +1,5 @@
 import math
 from collections.abc import Awaitable, Callable
-from typing import Optional
 
 from fastapi import HTTPException, Request, status
 from services.rate_limit import (
@@ -13,7 +12,7 @@ from services.rate_limit import (
 )
 
 
-def get_rate_limiter(app) -> Optional[RateLimiter]:
+def get_rate_limiter(app) -> RateLimiter | None:
     # Set in the lifespan when REDIS_URL is configured; without it (local
     # development, most tests) nothing is limited.
     return getattr(app.state, "rate_limiter", None)
@@ -36,7 +35,7 @@ def too_many_requests(decision: Decision, what: str) -> HTTPException:
 class Limited:
     """What a route learns from its rate limit check."""
 
-    def __init__(self, limiter: Optional[RateLimiter], rule: Rule, client: str) -> None:
+    def __init__(self, limiter: RateLimiter | None, rule: Rule, client: str) -> None:
         self._limiter = limiter
         self._rule = rule
         self.client = client
@@ -47,7 +46,7 @@ class Limited:
 
 
 def rate_limit(
-    rule: Rule, what: str, client: Optional[str] = None
+    rule: Rule, what: str, client: str | None = None
 ) -> Callable[[Request], Awaitable[Limited]]:
     """
     A dependency that counts the request against `rule` and answers 429 once

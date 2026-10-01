@@ -6,7 +6,6 @@ standard variable, e.g. http://tempo.monitoring:4318).
 """
 
 import os
-from typing import Optional
 
 from fastapi import FastAPI
 from opentelemetry import trace
@@ -25,7 +24,7 @@ EXCLUDED_URLS = "health"
 
 
 def instrument(
-    app: FastAPI, provider: TracerProvider, engine: Optional[Engine] = None
+    app: FastAPI, provider: TracerProvider, engine: Engine | None = None
 ) -> None:
     FastAPIInstrumentor.instrument_app(
         app, tracer_provider=provider, excluded_urls=EXCLUDED_URLS
@@ -37,7 +36,7 @@ def instrument(
 
 
 def setup_tracing(
-    app: FastAPI, engine: Engine, exporter: Optional[SpanExporter] = None
+    app: FastAPI, engine: Engine, exporter: SpanExporter | None = None
 ) -> bool:
     """Instrument the app when an OTLP endpoint is configured."""
     if exporter is None:

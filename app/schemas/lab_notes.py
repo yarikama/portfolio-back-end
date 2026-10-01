@@ -1,5 +1,4 @@
 import datetime
-from typing import Optional
 from uuid import UUID
 
 from schemas.base import BaseSchema
@@ -21,14 +20,14 @@ class LabNoteCreate(LabNoteBase):
 
 
 class LabNoteUpdate(BaseSchema):
-    title: Optional[str] = None
-    slug: Optional[str] = None
-    excerpt: Optional[str] = None
-    content: Optional[str] = None
-    tags: Optional[list[str]] = None
-    read_time: Optional[str] = None
-    date: Optional[datetime.date] = None
-    published: Optional[bool] = None
+    title: str | None = None
+    slug: str | None = None
+    excerpt: str | None = None
+    content: str | None = None
+    tags: list[str] | None = None
+    read_time: str | None = None
+    date: datetime.date | None = None
+    published: bool | None = None
 
 
 class LabNoteResponse(LabNoteBase):
@@ -43,7 +42,7 @@ class LabNoteListResponse(BaseSchema):
     slug: str
     excerpt: str
     tags: list[str]
-    read_time: Optional[str] = None
+    read_time: str | None = None
     date: datetime.date
     published: bool
     created_at: datetime.datetime

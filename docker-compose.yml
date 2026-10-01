@@ -7,7 +7,6 @@ services:
       - "8080:8080"
     volumes:
       - ./app:/app/
-      - ./ml/model:/app/ml/model/
       - ./.env.local:/app/.env:ro
     depends_on:
       - db
@@ -20,8 +19,9 @@ services:
     ports:
       - "6379:6379"
 
+  # The same major version as production (CloudNativePG).
   db:
-    image: postgres:16
+    image: postgres:17
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -29,7 +29,8 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      # A new name for 17: Postgres can't open the old volume's 16 data.
+      - postgres17_data:/var/lib/postgresql/data
 
 volumes:
-  postgres_data:
+  postgres17_data:

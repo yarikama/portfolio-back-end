@@ -1,11 +1,9 @@
-from typing import Optional
-
 from schemas.base import BaseSchema
 
 
 class UploadData(BaseSchema):
     url: str
-    filename: Optional[str] = None
+    filename: str | None = None
 
 
 class UploadResponse(BaseSchema):

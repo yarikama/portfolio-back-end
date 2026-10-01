@@ -157,7 +157,9 @@ async def complete(prompt: str, min_prob: float) -> Completion:
             text += choice.get("text", "")
             done = False
             for token, logprob in zip(
-                logprobs.get("tokens", []), logprobs.get("token_logprobs", [])
+                logprobs.get("tokens", []),
+                logprobs.get("token_logprobs", []),
+                strict=False,
             ):
                 tokens.append((token, logprob))
                 done = done or keep(token, logprob, min_prob)[1]
