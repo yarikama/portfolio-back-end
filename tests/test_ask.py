@@ -815,6 +815,13 @@ async def test_a_turn_about_a_passage_is_remembered_by_its_page(chat):
 
 
 @pytest.mark.anyio
+async def test_a_page_without_a_passage_is_not_remembered_as_one(chat):
+    first, _ = await chat("What is this page?", page="/works")
+    _, messages = await chat("Say more.", conversation=first["conversation"])
+    assert turns(messages)[0] == ("user", "What is this page?")
+
+
+@pytest.mark.anyio
 async def test_an_answer_that_broke_off_is_not_remembered(chat, model, app, redis):
     first, _ = await chat("One?", "1.")
     model(

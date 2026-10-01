@@ -208,7 +208,13 @@ async def stream(
                 await ask_history.save(
                     redis,
                     conversation,
-                    ask_history.Turn(answer.question, answer.text, answer.page),
+                    ask_history.Turn(
+                        answer.question,
+                        answer.text,
+                        # The API accepts a page without a passage; only a
+                        # passage makes the turn "about" that page.
+                        answer.page if answer.quote else None,
+                    ),
                 )
         except ModelUnavailableError:
             raise  # before the first byte: the route answers 503
