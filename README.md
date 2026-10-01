@@ -1,51 +1,114 @@
-# Portfolio Backend
+# Portfolio Back-End
 
-Yarikama's Portfolio Backend API - Built with FastAPI
+[![CI](https://github.com/yarikama/portfolio-back-end/actions/workflows/ci.yaml/badge.svg)](https://github.com/yarikama/portfolio-back-end/actions/workflows/ci.yaml)
 
-## Tech Stack
+The API behind [yarikama.com](https://www.yarikama.com), Henry Hsu's portfolio. It serves the projects and notes, answers visitors' questions about them with a self-hosted language model, and gives the author an editor with inline autocomplete from a second model.
 
-- **Framework**: FastAPI
-- **Database**: PostgreSQL 17 (CloudNativePG on k3s)
-- **ORM**: SQLAlchemy
-- **Migration**: Alembic
-- **Rate limiting**: Redis (Lua scripts)
-- **Package Manager**: uv
-- **Hosting**: k3s on a home server, exposed through Cloudflare Tunnel
+It is built with FastAPI and PostgreSQL. It runs on a single-node k3s cluster on a home server, together with its database, Redis, both models and the monitoring stack, and is reached through a Cloudflare Tunnel. The front end is [portfolio-front-end](https://github.com/yarikama/portfolio-front-end).
 
-## Quick Start
+## What it does
+
+- **Content API**: projects, notes and categories, cached at the edge, plus a contact form that emails the owner.
+- **Ask about my work**: `POST /api/v1/ask` streams an answer from Qwen3.5-4B over server-sent events, with checked citations to the projects, notes and resume it used.
+- **Note autocomplete**: suggestions from Qwen3.5-0.8B-Base while the author writes. Every suggestion and what became of it is stored as training data.
+- **Images**: uploads go to Cloudflare R2. A background worker makes WebP variants of each image.
+- **Protection**: rate limits in Redis, a cap on concurrent answers, a daily limit on questions for the whole site, and an admin area behind JWT login.
+
+## Architecture
+
+```
+www.yarikama.com (Vercel) ──▶ api.yarikama.com ──▶ Cloudflare Tunnel
+                                                        │
+  ┌─────────────────────── k3s on a home server ───────▼──────────────────────────┐
+  │  Traefik ──▶ FastAPI (this repo) ──┬──▶ PostgreSQL 17 (CloudNativePG)          │
+  │                                    │        └─ WAL + daily backups ──▶ R2      │
+  │                                    ├──▶ Redis: rate limits, job queue          │
+  │                                    ├──▶ vLLM: Qwen3.5-4B AWQ (ask)      ┐ one  │
+  │                                    └──▶ vLLM: Qwen3.5-0.8B (autocomplete) ┘ GPU │
+  │  Image worker (this repo, same image) ──▶ R2: images and WebP variants         │
+  │  Prometheus, Loki, Tempo, Grafana, Alertmanager                                │
+  └────────────────────────────────────────────────────────────────────────────────┘
+```
+
+The two models share one 8 GB laptop GPU, through Kubernetes time-slicing with a fixed memory budget for each. The cluster is managed with GitOps (Argo CD). Its manifests and runbooks live in a separate, private `homelab` repo. References below to "homelab `docs/…`" point there.
+
+## Design notes
+
+**Ask: cache-augmented generation, not RAG.** All published content is about 9k tokens. Instead of retrieving chunks, [`services/ask.py`](app/services/ask.py) puts every published project and note, plus the resume, into the system prompt. That prefix is the same for every question, so vLLM's prefix cache computes it once: the first token arrives in about 0.1–0.2 s once the cache is warm.
+- **Freshness.** The prompt is rebuilt whenever published content changes, and drafts never enter it.
+- **Citations.** The model cites `[P1]`, `[N1]` or `[R1]`. Citations to ids that don't exist are dropped before they reach the client.
+- **Size guard.** A token estimate guards the context window. The `ask_prompt_tokens` metric triggers an alert well before the limit. If the limit is reached anyway, the oldest notes are left out first, so the chat keeps working.
+- **Injection.** The visitor's question and any highlighted passage are treated as untrusted. The model has no tools, so an injected instruction can only change the text of an answer.
+- **Model choice.** The model was chosen, and prompt changes are checked, with a 40-question evaluation set in [`eval/ask/`](eval/ask/).
+
+**Autocomplete that knows when to stop.** [`services/autocomplete.py`](app/services/autocomplete.py) streams the completion token by token, using the last 2,000 characters before the cursor.
+- **Stopping early.** It stops at the first token whose probability is below a threshold (0.5 by default), at the end of a sentence, or where the model starts repeating the text before it. Closing the stream also makes vLLM abort the rest of the generation.
+- **Failures.** A slow or failed model gives an empty suggestion, never an error.
+- **Training data.** The outcome of each suggestion (accepted, typed along, rejected or ignored, and how many tokens were taken) is stored for later fine-tuning.
+
+**Rate limits that hold under concurrency.** Each check is a single Lua script in Redis, so reading, deciding and recording happen atomically ([`services/rate_limit.py`](app/services/rate_limit.py)). Two algorithms are used: sliding logs for small, exact budgets, and token buckets for bursts. Each rule chooses what happens when Redis is down: login fails closed, everything else fails open. A 429 still carries CORS headers, so the browser can show the message instead of a network error.
+
+**Background jobs on Redis Streams.** [`services/jobs.py`](app/services/jobs.py) is a small at-least-once queue built on a consumer group.
+- **Retries.** A job is acknowledged only after it succeeds. A job whose worker died is claimed again by another worker (`XAUTOCLAIM`).
+- **Dead letters.** Jobs that keep failing move to a dead-letter stream.
+- **Recovery.** Redis keeps no data across restarts, so the worker reconciles with R2 on start and every hour, queuing any image still missing its variants.
+
+**Edge caching without stale CORS.** Public `GET`s answer with an `ETag` and `s-maxage=60, stale-while-revalidate=600`, so Cloudflare serves most traffic. Cloudflare's cache ignores `Vary: Origin`, so these responses use `Access-Control-Allow-Origin: *` instead of echoing the origin ([`api/cache.py`](app/api/cache.py)).
+
+**Observability.**
+- **Traces.** OpenTelemetry traces every request, with spans for SQL, Redis and model calls. Log lines inside a request carry its `trace_id`.
+- **Metrics.** Prometheus metrics (answers, tokens, time to first token, prompt size, queue depth) are served on a separate port, so the public Ingress never exposes them.
+
+**Security.**
+- The admin password is stored as a bcrypt hash, and admin sessions use short-lived JWTs.
+- Drafts are filtered out of every public endpoint and of the chat prompt, and tests check this.
+- The production image runs as an unprivileged user.
+- The deploy key that can change the cluster is only available to workflows on `main`.
+
+## Tech stack
+
+| Area | Choice |
+|---|---|
+| API | FastAPI, Pydantic 2, Uvicorn |
+| Data | PostgreSQL 17 (CloudNativePG), SQLAlchemy 2, Alembic |
+| Cache and queue | Redis (Lua scripts, Streams) |
+| Models | vLLM, OpenAI-compatible API: Qwen3.5-4B AWQ and Qwen3.5-0.8B-Base |
+| Storage | Cloudflare R2 (S3 API through aioboto3), Pillow for WebP |
+| Observability | OpenTelemetry, Prometheus client, Loguru |
+| Tooling | uv, Ruff, pytest, pre-commit, GitHub Actions |
+| Runtime | Docker, k3s, Argo CD, Cloudflare Tunnel |
+
+## Getting started
+
+Requires [uv](https://docs.astral.sh/uv/) and Docker.
 
 ```bash
 make install                  # dependencies; also creates .env.local and .env.prod from .env.example
 cp .env.example .env          # make run reads .env
-docker-compose up -d db       # local PostgreSQL on :5432 (user/password postgres, database app)
-make run                      # API with hot reload
+docker-compose up -d db redis # local PostgreSQL on :5432 (postgres/postgres, database app) and Redis on :6379
+make hash                     # prompts for an admin password and prints its hash for ADMIN_PASSWORD_HASH
+make run                      # API with hot reload on http://localhost:8080
 ```
 
-- API: http://localhost:8080
-- Swagger: http://localhost:8080/docs
+- Interactive docs: http://localhost:8080/docs.
+- **Rate limits** are off unless `REDIS_URL` is set (for example `redis://localhost:6379/0`).
+- **Ask and autocomplete** answer `503` until `ASK_URL` and `AUTOCOMPLETE_URL` point at an OpenAI-compatible server.
 
-Which env file is read depends on how the app starts: `make run` (and anything run from the repo root) reads `.env`; the Docker stack (`make deploy`) reads `.env.<ENV>`, `.env.local` by default. `.env.prod` is the source for the production Secret (see Deployment). All three are gitignored.
+Which env file is read depends on how the app starts:
+- `make run`, and anything run from the repo root, reads `.env`.
+- The Docker stack (`make deploy`) reads `.env.<ENV>`, which is `.env.local` by default.
+- `.env.prod` is the source for the production Secret (see [Deployment](#deployment)).
 
-## Development
+All three are gitignored.
 
-### Local Development (Recommended)
-
-```bash
-make install    # Install dependencies
-make run        # Start dev server with hot reload
-make test       # Run tests
-make lint       # Check code style
-make format     # Auto-format code
-```
-
-### Docker Development
+### Docker
 
 ```bash
-make deploy     # Start dev environment with Docker
-make logs       # View container logs
-make shell      # Enter container shell
-make rebuild    # Rebuild image (after adding dependencies)
-make down       # Stop containers
+make deploy     # the app, PostgreSQL and Redis in Docker, with hot reload
+make logs       # follow the logs
+make shell      # a shell in the app container
+make rebuild    # rebuild the image after changing dependencies
+make down       # stop everything
 ```
 
 ## Testing
@@ -53,70 +116,76 @@ make down       # Stop containers
 ```bash
 docker-compose up -d db
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/app make test
+make lint       # ruff check and ruff format --check
+make format     # fix what can be fixed
 ```
 
-Most tests are self-contained; `tests/test_project_order.py` needs a real PostgreSQL (it defaults to `localhost:5432/test_db`, which the compose database does not create, hence the `DATABASE_URL`). CI runs the suite on Python 3.10, 3.11 and 3.12 against a PostgreSQL service container.
+**Database tests.** Most tests are self-contained. The ones that check queries against a real PostgreSQL (project order, drafts by slug) default to `localhost:5432/test_db`, which the compose database does not create; that is why the command above sets `DATABASE_URL`.
 
-The rate-limit tests run their Lua scripts in fakeredis by default. Set `REDIS_TEST_URL=redis://localhost:6379/15` to run them against a real Redis instead (CI does); that database is flushed.
+**Redis tests.** The rate-limit tests run their Lua scripts in fakeredis by default. Set `REDIS_TEST_URL=redis://localhost:6379/15` to run them against a real Redis as well. That database is flushed.
 
-## Database
-
-### PostgreSQL (Production)
-
-PostgreSQL 17 runs on the k3s cluster, managed by [CloudNativePG](https://cloudnative-pg.io). WAL is archived continuously and a base backup is taken daily to the Cloudflare R2 bucket `yarikama-db-backups`, so the database can be restored to any point in the last 30 days. Manifests and the restore runbook live in the homelab repo under `apps/portfolio-db`.
-
-### Migrations
-
-```bash
-# Run migrations (local)
-DATABASE_URL="your-database-url" PYTHONPATH=app uv run alembic -c app/alembic.ini upgrade head
-
-# Create new migration
-DATABASE_URL="your-database-url" PYTHONPATH=app uv run alembic -c app/alembic.ini revision --autogenerate -m "description"
-
-# Rollback one version
-DATABASE_URL="your-database-url" PYTHONPATH=app uv run alembic -c app/alembic.ini downgrade -1
-```
+**CI.** [GitHub Actions](.github/workflows/ci.yaml) runs Ruff, then the tests on Python 3.10, 3.11 and 3.12 against PostgreSQL and Redis service containers.
 
 ## Deployment
 
-Production runs on a single-node k3s cluster and is served at `https://api.yarikama.com` through a Cloudflare Tunnel. The Kubernetes manifests, secret tooling and runbooks live in the private [homelab](https://github.com/yarikama/homelab) repo.
-
-Deploys are automatic: **merging to `main` is the deploy.**
+**Merging to `main` is the deploy.** It takes about five minutes from merge to live.
 
 1. CI runs lint and tests, then builds the production image for `linux/amd64` and pushes it to GHCR as `ghcr.io/yarikama/portfolio-backend:sha-<short>` and `latest`.
-2. The `deploy` job commits the new tag to `apps/portfolio-backend/kustomization.yaml` in the homelab repo. It authenticates with a deploy key held in the `production` environment, which only `main` can use.
-3. Argo CD picks up that commit within about three minutes and rolls the pods; the new pod must pass `/health` before the old one stops, so there is no downtime.
+2. The `deploy` job commits the new tag to `apps/portfolio-backend/kustomization.yaml` in the homelab repo. It authenticates with a deploy key held in the `production` environment, which only `main` can use. Two quick merges queue rather than race.
+3. Argo CD picks up that commit within about three minutes and rolls the pods. The new pod must pass `/health` before the old one stops, so there is no downtime.
 
-Merge to live takes about five minutes. To roll back, `git revert` the `deploy(portfolio-backend): sha-…` commit in the homelab repo; `kubectl rollout undo` does not stick, because Argo CD restores what Git says.
+**Rolling back.** `git revert` the `deploy(portfolio-backend): sha-…` commit in the homelab repo. `kubectl rollout undo` does not stick, because Argo CD restores what Git says.
 
-Production configuration is a Sealed Secret in the homelab repo, generated from `.env.prod` by `scripts/create-secret.sh` there; `DATABASE_URL` is not part of it and comes from the CloudNativePG-generated Secret instead.
+**Configuration.** Production configuration is a Sealed Secret in the homelab repo, generated from `.env.prod` by `scripts/create-secret.sh` there. `DATABASE_URL` is not part of it: it comes from the Secret that CloudNativePG generates.
 
-The database is PostgreSQL on the same cluster, managed by CloudNativePG, with continuous backups to Cloudflare R2.
-
-Database migrations run on their own: the pod's init container runs `alembic upgrade head` before the API starts. To run Alembic by hand against production, run it inside the pod, which already has the right `DATABASE_URL`:
+**Migrations** run on their own: the pod's init container runs `alembic upgrade head` before the API starts. To run Alembic by hand against production, run it inside the pod, which already has the right `DATABASE_URL`:
 
 ```bash
 kubectl -n portfolio exec deploy/portfolio-backend -c api -- alembic -c alembic.ini current
 ```
 
-## Project Structure
+**The image worker** runs from the same image with `python -m worker`.
+
+**Database backups.** WAL is archived continuously to the Cloudflare R2 bucket `yarikama-db-backups`, and a base backup is taken daily. The database can be restored to any point in the last 30 days, and the restore was tested before production moved onto it. Manifests and the restore runbook: homelab `apps/portfolio-db` and `docs/05-database.md`.
+
+### Migrations locally
+
+```bash
+DATABASE_URL="..." PYTHONPATH=app uv run alembic -c app/alembic.ini upgrade head
+DATABASE_URL="..." PYTHONPATH=app uv run alembic -c app/alembic.ini revision --autogenerate -m "description"
+DATABASE_URL="..." PYTHONPATH=app uv run alembic -c app/alembic.ini downgrade -1
+```
+
+## Project structure
 
 ```
 app/
+├── main.py                 App factory: middleware (rate limit, CORS, edge cache) and routers
+├── worker.py               Background worker for image variants (python -m worker)
 ├── api/
-│   ├── dependencies/    # Auth, etc.
-│   └── routes/          # API endpoints
-├── core/                # Config, security
-├── schemas/             # Pydantic models
-├── db/
-│   ├── session.py       # Database connection
-│   └── models/          # SQLAlchemy models
-├── alembic/             # Database migrations
-└── main.py              # Application entry
+│   ├── routes/             Endpoints: content, auth, contact, upload, ask, autocomplete, health
+│   ├── dependencies/       Admin auth, per-route rate limits
+│   ├── middleware.py       The site-wide public rate limit
+│   └── cache.py            ETag, Cache-Control and CORS for cacheable responses
+├── services/
+│   ├── ask.py              Prompt snapshot, citation checking, streaming answers
+│   ├── autocomplete.py     Prompting, confidence cut-off, repetition trimming
+│   ├── rate_limit.py       Lua-scripted sliding logs and token buckets
+│   ├── jobs.py             At-least-once queue on Redis Streams
+│   ├── image_jobs.py       Image jobs and reconciliation with R2
+│   ├── images.py           WebP variants with Pillow
+│   ├── storage.py          Cloudflare R2
+│   └── notify.py           Contact-form emails
+├── core/                   Settings, JWT and bcrypt, tracing, logging, startup
+├── db/models/              SQLAlchemy models
+├── schemas/                Pydantic request and response models (camelCase JSON)
+├── alembic/                Migrations
+└── content/resume.md       The resume the chat answers from
+eval/ask/                   The chat's evaluation questions and scripts
+tests/                      pytest suite
 ```
 
-## Environment Variables
+## Configuration
 
 | Variable | Description | Default |
 |----------|-------------|---------|
@@ -127,42 +196,59 @@ app/
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | Token lifetime | `120` |
 | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`, `R2_PUBLIC_URL` | Cloudflare R2, for image uploads | bucket `yarikama-portfolio-backend` |
 | `DEBUG` | Debug mode | `False` |
-| `REDIS_URL` | Redis for rate limits, e.g. `redis://:password@host:6379/0`; empty turns rate limiting off | empty |
+| `REDIS_URL` | Redis for rate limits and the job queue, e.g. `redis://:password@host:6379/0`; empty turns rate limiting off | empty |
 | `SMTP_HOST`, `SMTP_PORT` | SMTP server (STARTTLS) for contact-form notifications | `smtp.gmail.com`, `587` |
-| `SMTP_USERNAME`, `SMTP_PASSWORD`, `CONTACT_NOTIFY_TO` | Sender account (for Gmail: the address and an app password) and who gets an email per contact message; any empty turns notifications off | empty |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP/HTTP endpoint for traces (e.g. Grafana Tempo, `http://tempo:4318`); empty turns tracing off. Requests, SQL, Redis and httpx calls become spans, and log lines inside a request end with `trace_id=...` | empty |
+| `SMTP_USERNAME`, `SMTP_PASSWORD`, `CONTACT_NOTIFY_TO` | Sender account (for Gmail: the address and an app password) and who gets an email per contact message; if any is empty, no email is sent | empty |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP/HTTP endpoint for traces (e.g. Grafana Tempo, `http://tempo:4318`); empty turns tracing off | empty |
 | `OTEL_SERVICE_NAME` | Service name on the traces | `portfolio-backend` |
-| `METRICS_PORT` | Serve Prometheus metrics on this port (kept off the API port, so the public Ingress never exposes them); `0` turns them off | `0` |
+| `METRICS_PORT` | Serve Prometheus metrics on this port, apart from the API; `0` turns them off | `0` |
 | `AUTOCOMPLETE_URL` | OpenAI-compatible completions server for note autocomplete; empty disables it (503) | empty |
 | `AUTOCOMPLETE_MODEL`, `AUTOCOMPLETE_MODEL_VERSION` | Model name to request, and the version recorded with each suggestion | `autocomplete`, `unknown` |
 | `AUTOCOMPLETE_MIN_TOKEN_PROB` | Suggestions stop at the first token less likely than this | `0.5` |
-| `ASK_URL` | OpenAI-compatible chat server with an instruct model, for the "ask about my work" chat; empty disables it (503) | empty |
+| `AUTOCOMPLETE_FREQUENCY_PENALTY`, `AUTOCOMPLETE_PRESENCE_PENALTY` | Discourage repeating what the suggestion itself already wrote (not the note) | `2.0`, `1.0` |
+| `ASK_URL` | OpenAI-compatible chat server with an instruct model, for the ask chat; empty disables it (503) | empty |
 | `ASK_MODEL`, `ASK_MAX_TOKENS`, `ASK_TEMPERATURE` | Model name to request, answer length cap in tokens (Chinese takes about one per character), sampling temperature | `ask`, `800`, `0.3` |
 | `ASK_CONTEXT_TOKENS` | The answer model's context length (vLLM `--max-model-len`); the system prompt gets what the question and the answer leave | `16384` |
 | `ASK_MAX_CONCURRENT` | Answers generated at once; past this the API answers `503` right away | `4` |
-| `AUTOCOMPLETE_FREQUENCY_PENALTY`, `AUTOCOMPLETE_PRESENCE_PENALTY` | Discourage repeating what the suggestion itself already wrote (not the note); a suggestion is also cut where it starts repeating the text before it | `2.0`, `1.0` |
 
-`make hash` prompts for the admin password without echoing it, asks for it twice, and can write the hash into `.env.local`.
-
-## API Endpoints
+## API
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /health` | Liveness, used by Kubernetes probes and uptime monitoring: `{"status": "ok"}` |
+| `GET /health` | Liveness, for Kubernetes probes and uptime monitoring: `{"status": "ok"}` |
 | `GET /docs`, `GET /redoc` | Interactive API docs |
 | `POST /api/v1/auth/login` | `{"username", "password"}` → `{"access_token", "token_type"}` |
 | `GET /api/v1/projects`, `GET /api/v1/projects/{slug}` | Published projects, in display order |
-| `GET /api/v1/lab-notes`, `GET /api/v1/lab-notes/{slug}`, `GET /api/v1/lab-notes/tags` | Published lab notes |
+| `GET /api/v1/lab-notes`, `GET /api/v1/lab-notes/{slug}`, `GET /api/v1/lab-notes/tags` | Published notes, and their tags with counts |
 | `GET /api/v1/categories` | Project categories |
-| `POST /api/v1/contact` | Submit the contact form; the owner gets an email with the message (reply goes to the visitor) |
-| `POST /api/v1/ask` | `{"question", "quote"?, "page"?}` (question up to 500 characters; `quote`: a passage the visitor highlighted on the site, up to 600, and `page`: the path it is on) → a server-sent event stream: `token` events `{"text"}`, then `done` `{"citations": [{"id", "kind", "title", "url"}], "truncated"}` (`truncated`: the answer hit `ASK_MAX_TOKENS` and ends mid-sentence), or `error` `{"detail"}` if the answer breaks off. `503` when the model is offline or busy. See [Ask about my work](#ask-about-my-work) |
+| `POST /api/v1/contact` | The contact form. The owner gets an email with the message; replying answers the visitor |
+| `POST /api/v1/ask` | A question about the owner's work, answered as a server-sent event stream (below). `503` when the model is offline or busy |
 | `/api/v1/admin/...` | Create, edit, reorder and delete content, list contact messages, upload images. Needs `Authorization: Bearer <token>` |
-| `POST /api/v1/admin/complete` | Note autocomplete: `{"prefix", "title", "noteId"}` → `{"id", "suggestion"}` (empty when the model is unsure or unavailable). Admin only |
+| `POST /api/v1/admin/complete` | Note autocomplete: `{"prefix", "title", "noteId"}` → `{"id", "suggestion"}` (empty when the model is unsure or unavailable) |
 | `POST /api/v1/admin/complete/{id}/feedback` | `{"outcome": "accepted" \| "rejected" \| "ignored", "acceptedChars"}`, recorded once per suggestion |
+
+Lists return `{"data": [...], "pagination": {"total", "limit", "offset", "hasMore"}}`; categories return `data` only. Single items return `{"data": {...}}`. Projects and notes use camelCase fields.
+
+### The ask stream
+
+Request: `{"question", "quote"?, "page"?}`.
+- `question`: up to 500 characters.
+- `quote`: optional; a passage the visitor highlighted on the site, up to 600 characters.
+- `page`: optional; the path the passage is on.
+
+Response: a stream of server-sent events.
+
+| Event | Data |
+|---|---|
+| `token` | `{"text"}`: the next piece of the answer |
+| `done` | `{"citations": [{"id", "kind", "title", "url"}], "truncated"}`: the sources the answer cited, in order. `truncated` means the answer hit `ASK_MAX_TOKENS` |
+| `error` | `{"detail"}`: the answer broke off |
+
+Design and when to switch to retrieval: homelab `docs/14-ask-chat-plan.md`.
 
 ### Rate limits
 
-Per visitor (the `CF-Connecting-IP` address that Cloudflare sets; IPv6 grouped by /64), kept in Redis so every replica shares them. Over a limit the API answers `429` with `Retry-After` in seconds and a readable `detail`.
+Limits are counted per visitor: the `CF-Connecting-IP` address that Cloudflare sets, with IPv6 grouped by /64. They are kept in Redis, so every replica shares them. Over a limit, the API answers `429` with `Retry-After` in seconds and a readable `detail`.
 
 | Rule | Limit | Algorithm | If Redis is down |
 |------|-------|-----------|------------------|
@@ -173,42 +259,30 @@ Per visitor (the `CF-Connecting-IP` address that Cloudflare sets; IPv6 grouped b
 
 Design and trade-offs: homelab `docs/11-rate-limiting.md`.
 
-### Ask about my work
-
-Visitors ask questions about the owner's work, answered by a self-hosted instruct model with citations. There is no retrieval: every published project and note, plus the resume (`app/content/resume.md`), go into the system prompt, the same for every question, so the model server's prefix cache computes them once (cache-augmented generation). The prompt is rebuilt when published content changes; drafts never enter it. The model cites documents as `[P1]`, `[N1]` or `[R1]`; citations to ids that do not exist are dropped from `done`, and the frontend should drop them from the text too. Past its token budget (estimated; `ask_prompt_tokens` against `ask_prompt_budget_tokens`), the oldest notes and then the oldest projects are left out, with a warning and `ask_documents_dropped`, instead of every question failing; an alert should fire well before that, as the signal to switch to retrieval. The evaluation questions are in `eval/ask/`. Design, and when to switch to retrieval: homelab `docs/14-ask-chat-plan.md`.
-
 ### Image variants
 
-Uploaded JPEG, PNG and WebP images get WebP variants 640 and 1600 px wide (`<name>.w640.webp`, `<name>.w1600.webp`, never upscaled) from a background worker: the upload queues a job on a Redis Stream, and `python -m worker` (same image, `PYTHONPATH=app`) makes and stores them, retrying failed jobs and moving ones that keep failing to `jobs:images:dead`. On start and every hour it also queues any image still missing variants, which backfills old uploads and covers jobs lost when Redis restarts. The site loads variants with `srcset` and falls back to the original until they exist.
+Uploaded JPEG, PNG and WebP images get WebP variants 640 and 1600 px wide (`<name>.w640.webp`, `<name>.w1600.webp`), never upscaled. The site loads them with `srcset` and falls back to the original until they exist.
 
 ### Caching
 
-`GET` on projects, lab notes and categories answers with an `ETag` and `Cache-Control: public, max-age=0, s-maxage=60, stale-while-revalidate=600`: browsers revalidate each time (a `304` when nothing changed), and Cloudflare keeps a copy for a minute. These responses carry `Access-Control-Allow-Origin: *`, because Cloudflare's cache ignores `Vary: Origin`. Edits in the admin show up publicly within about a minute.
+`GET` on projects, notes and categories answers with an `ETag` and `Cache-Control: public, max-age=0, s-maxage=60, stale-while-revalidate=600`.
+- **Browsers** revalidate on every request, and get a `304` when nothing changed.
+- **Cloudflare** keeps a copy for a minute, so edits in the admin show up publicly within about a minute.
 
-Lists return `{"data": [...], "pagination": {"total", "limit", "offset", "hasMore"}}` (categories: `data` only); single items return `{"data": {...}}`. Projects and lab notes use camelCase fields.
-
-## Known Limitations
-
-- The `request_logs` table is left over from a removed ML predictor. It is empty and unused; the model stays only so Alembic does not propose dropping it.
-
-## Free Tier Limits
-
-| Service | Free Quota |
-|---------|------------|
-| **Cloudflare R2** | 10 GB storage (uploaded images and database backups) |
-
-## Make Commands
+## Make commands
 
 | Command | Description |
 |---------|-------------|
-| `make install` | Install dependencies |
-| `make run` | Run local dev server |
-| `make test` | Run tests |
-| `make lint` | Check code style |
-| `make format` | Format code |
-| `make deploy` | Start the local Docker Compose stack (not production; see Deployment) |
-| `make down` | Stop Docker containers |
-| `make logs` | View Docker logs |
-| `make shell` | Enter Docker container |
+| `make install` | Install dependencies and create the env files |
+| `make run` | Local dev server with hot reload |
+| `make test` | Run the tests |
+| `make lint` / `make format` | Check / fix code style |
 | `make hash` | Generate the admin password hash (hidden input) |
-| `make clean` | Clean cache files |
+| `make deploy` / `make down` | Start / stop the local Docker Compose stack (not production) |
+| `make logs` / `make shell` / `make rebuild` | Docker logs, a shell in the container, rebuild the image |
+| `make revision` / `make upgrade` / `make downgrade` | Alembic migrations |
+| `make clean` | Remove caches |
+
+## Known limitations
+
+- The `request_logs` table is left over from a removed ML predictor. It is empty and unused; the model stays only so Alembic does not propose dropping it.
