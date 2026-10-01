@@ -39,6 +39,7 @@ The two models share one 8 GB laptop GPU, through Kubernetes time-slicing with a
 - **Citations.** The model cites `[P1]`, `[N1]` or `[R1]`. Citations to ids that don't exist are dropped before they reach the client.
 - **Size guard.** A token estimate guards the context window. The `ask_prompt_tokens` metric triggers an alert well before the limit. If the limit is reached anyway, the oldest notes are left out first, so the chat keeps working.
 - **Highlighted passages.** The backend works out which document a passage comes from: a note's page, or else the one document containing the text. It tells the model, and lists that document first among the citations even when the model forgets to cite it.
+- **Short memory.** A follow-up sees the conversation's last two questions and answers. They are kept in Redis for 30 minutes under a random conversation id, which the browser sends back; the browser never sends the history itself, so it can't be forged. The prompt budget keeps room for them, and without Redis, questions are answered without history.
 - **Questions are kept.** Each question, its answer and citations go to the `ask_questions` table for 30 days, without the visitor's address. The admin area lists them, filters for answers that cite nothing or broke off, and rates answers good or bad, which turns real questions into evaluation data.
 - **Injection.** The visitor's question and any highlighted passage are treated as untrusted. The model has no tools, so an injected instruction can only change the text of an answer.
 - **Model choice.** The model was chosen, and prompt changes are checked, with a 40-question evaluation set in [`eval/ask/`](eval/ask/).
@@ -172,6 +173,7 @@ app/
 ├── services/
 │   ├── ask.py              Prompt snapshot, citation checking, streaming answers
 │   ├── ask_log.py          Keeping each question and answer for 30 days
+│   ├── ask_history.py      A conversation's last two turns, in Redis
 │   ├── autocomplete.py     Prompting, confidence cut-off, repetition trimming
 │   ├── rate_limit.py       Lua-scripted sliding logs and token buckets
 │   ├── jobs.py             At-least-once queue on Redis Streams
@@ -237,17 +239,18 @@ Lists return `{"data": [...], "pagination": {"total", "limit", "offset", "hasMor
 
 ### The ask stream
 
-Request: `{"question", "quote"?, "page"?}`.
+Request: `{"question", "quote"?, "page"?, "conversation"?}`.
 - `question`: up to 500 characters.
 - `quote`: optional; a passage the visitor highlighted on the site, up to 600 characters.
 - `page`: optional; the path the passage is on.
+- `conversation`: optional; the id from the previous answer's `done` event, to continue that conversation. An unknown or expired id starts a new one.
 
 Response: a stream of server-sent events.
 
 | Event | Data |
 |---|---|
 | `token` | `{"text"}`: the next piece of the answer |
-| `done` | `{"citations": [{"id", "kind", "title", "url"}], "truncated"}`: the sources the answer cited, in order; for a passage, the document it comes from is first. `truncated` means the answer hit `ASK_MAX_TOKENS` |
+| `done` | `{"citations": [{"id", "kind", "title", "url"}], "truncated", "conversation"}`: the sources the answer cited, in order; for a passage, the document it comes from is first. `truncated` means the answer hit `ASK_MAX_TOKENS`; `conversation` is the id to send with a follow-up |
 | `error` | `{"detail"}`: the answer broke off |
 
 Design and when to switch to retrieval: homelab `docs/14-ask-chat-plan.md`.

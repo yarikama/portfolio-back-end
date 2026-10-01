@@ -18,7 +18,7 @@ from db.session import Base
 from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
 from main import get_application
-from services import ask, ask_log
+from services import ask, ask_history, ask_log
 from services.rate_limit import ASK, RateLimiter
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -167,7 +167,7 @@ def test_prompt_size_and_budget_are_exported(session_factory, monkeypatch):
         snap.system_prompt
     )
     assert REGISTRY.get_sample_value("ask_prompt_budget_tokens") == (
-        16384 - 400 - ask.QUESTION_TOKENS
+        16384 - 400 - ask.QUESTION_TOKENS - ask.HISTORY_TURNS * (500 + 400 + 50)
     )
     assert REGISTRY.get_sample_value("ask_documents_dropped") == 0
 
@@ -188,7 +188,10 @@ def test_over_budget_leaves_out_the_oldest_notes_then_projects(
             monkeypatch.setattr(
                 config,
                 "ASK_CONTEXT_TOKENS",
-                tokens + config.ASK_MAX_TOKENS + ask.QUESTION_TOKENS,
+                tokens
+                + config.ASK_MAX_TOKENS
+                + ask.QUESTION_TOKENS
+                + ask.history_tokens(),
             )
             return ask.build_snapshot(db, ask.content_key(db))
 
@@ -307,7 +310,10 @@ def test_the_answer_streams_then_lists_what_it_cited(model, client):
         ("token", {"text": "PAPIT [P1]"}),
         ("token", {"text": " and [P9]."}),
     ]
-    assert got[-1] == (
+    name, done = got[-1]
+    # A new conversation, to send back with a follow-up.
+    assert ask_history.CONVERSATION_ID.match(done.pop("conversation"))
+    assert (name, done) == (
         "done",
         {
             "citations": [
@@ -726,3 +732,127 @@ def test_every_ask_counter_series_exists_from_the_start():
             REGISTRY.get_sample_value("ask_requests_total", {"result": result})
             is not None
         )
+
+
+# ── conversations ────────────────────────────────────────────────────────────
+
+
+@pytest.fixture
+async def chat(app, redis, model):
+    """Ask in order, as one visitor: returns (done data, messages sent)."""
+    app.state.redis = redis
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+
+        async def send(question, reply="An answer.", **extra):
+            sent = model(model_stream([reply]))
+            response = await client.post(
+                "/api/v1/ask", json={"question": question, **extra}
+            )
+            name, data = events(response.text)[-1]
+            return (data if name == "done" else None), sent["json"]["messages"]
+
+        yield send
+
+
+def turns(messages):
+    """The conversation the model saw, without the system prompt."""
+    return [(m["role"], m["content"]) for m in messages[1:]]
+
+
+@pytest.mark.anyio
+async def test_a_follow_up_sees_the_conversation_so_far(chat):
+    first, _ = await chat("What is PAPIT?", "A pruning method [P1].")
+    second, messages = await chat(
+        "And how fast is it?", conversation=first["conversation"]
+    )
+
+    assert turns(messages) == [
+        ("user", "What is PAPIT?"),
+        ("assistant", "A pruning method [P1]."),
+        ("user", "And how fast is it?"),
+    ]
+    assert second["conversation"] == first["conversation"]
+
+
+@pytest.mark.anyio
+async def test_only_the_last_two_turns_are_kept_for_half_an_hour(chat, redis):
+    done, _ = await chat("One?", "1.")
+    conversation = done["conversation"]
+    for question, reply in (("Two?", "2."), ("Three?", "3.")):
+        await chat(question, reply, conversation=conversation)
+    _, messages = await chat("Four?", conversation=conversation)
+
+    assert [content for _, content in turns(messages)] == [
+        "Two?",
+        "2.",
+        "Three?",
+        "3.",
+        "Four?",
+    ]
+    ttl = await redis.ttl(ask_history.key(conversation))
+    assert 0 < ttl <= ask_history.HISTORY_TTL_SECONDS
+
+
+@pytest.mark.anyio
+async def test_an_unknown_or_forged_conversation_starts_a_new_one(chat):
+    unknown = "a" * 22
+    done, messages = await chat("Hi?", conversation=unknown)
+    assert turns(messages) == [("user", "Hi?")]
+    assert done["conversation"] != unknown
+
+
+@pytest.mark.anyio
+async def test_a_turn_about_a_passage_is_remembered_by_its_page(chat):
+    first, _ = await chat(
+        "Why?", "Because [N1].", quote="Any matrix is a rotation.", page="/notes/svd"
+    )
+    _, messages = await chat("Say more.", conversation=first["conversation"])
+
+    assert turns(messages)[0] == ("user", "(About a passage on /notes/svd) Why?")
+    assert "Any matrix is a rotation." not in str(messages[1:])
+
+
+@pytest.mark.anyio
+async def test_an_answer_that_broke_off_is_not_remembered(chat, model, app, redis):
+    first, _ = await chat("One?", "1.")
+    model(
+        'data: {"choices": [{"delta": {"content": "He "}}]}\n\n'
+        'data: {"error": {"message": "engine died"}}\n\ndata: [DONE]\n\n'
+    )
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        await client.post(
+            "/api/v1/ask",
+            json={"question": "Two?", "conversation": first["conversation"]},
+        )
+    _, messages = await chat("Three?", conversation=first["conversation"])
+
+    assert [content for _, content in turns(messages)] == ["One?", "1.", "Three?"]
+
+
+def test_without_redis_questions_are_answered_without_history(model, client):
+    model(model_stream(["Hi."]))
+    first = events(client.post("/api/v1/ask", json={"question": "Hi?"}).text)[-1][1]
+    sent = model(model_stream(["Hi again."]))
+    response = client.post(
+        "/api/v1/ask",
+        json={"question": "Again?", "conversation": first["conversation"]},
+    )
+
+    assert response.status_code == 200
+    assert turns(sent["json"]["messages"]) == [("user", "Again?")]
+
+
+def test_the_longest_history_fits_the_room_kept_for_it():
+    # All-Chinese, the worst case: about a token per character.
+    longest = ask_history.Turn(
+        "問" * ask.MAX_QUESTION_CHARS, "答" * config.ASK_MAX_TOKENS, "/notes/x"
+    )
+    answer = ask.Answer(SNAPSHOT, "Q?", history=[longest] * ask.HISTORY_TURNS)
+    history = answer.messages()[1:-1]
+    assert sum(ask.estimate_tokens(m["content"]) + 10 for m in history) <= (
+        ask.history_tokens()
+    )
