@@ -1,4 +1,3 @@
-from typing import Optional
 from uuid import UUID
 
 from api.dependencies import CurrentAdmin
@@ -30,9 +29,9 @@ PROJECT_DISPLAY_ORDER = (Project.order, Project.created_at.desc(), Project.id)
 async def get_all_projects_admin(
     _admin: CurrentAdmin,
     db: Session = Depends(get_db),
-    category_id: Optional[UUID] = Query(None, description="Filter by category UUID"),
-    featured: Optional[bool] = Query(None),
-    tag: Optional[str] = Query(None),
+    category_id: UUID | None = Query(None, description="Filter by category UUID"),
+    featured: bool | None = Query(None),
+    tag: str | None = Query(None),
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ):
@@ -207,9 +206,9 @@ async def reorder_projects(
 @router.get("/projects")
 async def get_projects(
     db: Session = Depends(get_db),
-    category_id: Optional[UUID] = Query(None, description="Filter by category UUID"),
-    featured: Optional[bool] = Query(None),
-    tag: Optional[str] = Query(None),
+    category_id: UUID | None = Query(None, description="Filter by category UUID"),
+    featured: bool | None = Query(None),
+    tag: str | None = Query(None),
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ):

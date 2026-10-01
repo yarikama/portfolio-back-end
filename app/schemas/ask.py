@@ -1,4 +1,4 @@
-from typing import Annotated, Optional
+from typing import Annotated
 
 from pydantic import StringConstraints
 from schemas.base import BaseSchema
@@ -16,14 +16,16 @@ class AskRequest(BaseSchema):
     ]
     # A passage the visitor highlighted on the site, and the path of the
     # page it is on, so the model knows which note or project it is from.
-    quote: Optional[
+    quote: (
         Annotated[
             str,
             StringConstraints(
                 strip_whitespace=True, min_length=1, max_length=MAX_QUOTE_CHARS
             ),
         ]
-    ] = None
-    page: Optional[
+        | None
+    ) = None
+    page: (
         Annotated[str, StringConstraints(max_length=200, pattern=r"^/[\w\-./%]*$")]
-    ] = None
+        | None
+    ) = None

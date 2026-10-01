@@ -13,7 +13,6 @@ import secrets
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
 
 from loguru import logger
 from prometheus_client import Counter
@@ -142,9 +141,7 @@ return {allowed, math.floor(tokens), retry}
 
 
 class RateLimiter:
-    def __init__(
-        self, redis: Redis, clock: Optional[Callable[[], float]] = None
-    ) -> None:
+    def __init__(self, redis: Redis, clock: Callable[[], float] | None = None) -> None:
         # clock (seconds) is for tests; by default the time comes from Redis,
         # so every replica measures windows against the same clock.
         self._redis = redis
@@ -202,7 +199,7 @@ def retry_after_header(decision: Decision) -> str:
     return str(max(1, math.ceil(decision.retry_after)))
 
 
-def client_id(headers: Mapping[str, str], peer: Optional[str]) -> str:
+def client_id(headers: Mapping[str, str], peer: str | None) -> str:
     """
     Who a request counts against.
 

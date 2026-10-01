@@ -1,7 +1,6 @@
 """Pydantic schemas for Category."""
 
 from datetime import datetime
-from typing import Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -22,7 +21,7 @@ class CategoryBase(BaseModel):
         max_length=100,
         description="Display label (e.g., 'ML/AI', 'Engineering')",
     )
-    description: Optional[str] = Field(
+    description: str | None = Field(
         None, description="Optional description of the category"
     )
     order: int = Field(0, description="Display order (lower number = higher priority)")
@@ -37,10 +36,10 @@ class CategoryCreate(CategoryBase):
 class CategoryUpdate(BaseModel):
     """Schema for updating a category."""
 
-    name: Optional[str] = Field(None, min_length=1, max_length=50)
-    label: Optional[str] = Field(None, min_length=1, max_length=100)
-    description: Optional[str] = None
-    order: Optional[int] = Field(None, ge=0)
+    name: str | None = Field(None, min_length=1, max_length=50)
+    label: str | None = Field(None, min_length=1, max_length=100)
+    description: str | None = None
+    order: int | None = Field(None, ge=0)
 
 
 class CategoryResponse(CategoryBase):

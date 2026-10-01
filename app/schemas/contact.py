@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Optional
 from uuid import UUID
 
 from pydantic import EmailStr, Field
@@ -14,8 +13,8 @@ class ContactCreate(BaseSchema):
 
 
 class ContactUpdate(BaseSchema):
-    read: Optional[bool] = Field(None)
-    replied: Optional[bool] = Field(None)
+    read: bool | None = Field(None)
+    replied: bool | None = Field(None)
 
 
 class ContactResponse(BaseSchema):

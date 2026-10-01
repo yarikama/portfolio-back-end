@@ -16,7 +16,6 @@ import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 import httpx
 from core import config
@@ -86,7 +85,7 @@ class Source:
     kind: str  # project, note or resume
     title: str
     # Where a citation links to on the site or elsewhere; None: nowhere.
-    url: Optional[str]
+    url: str | None
 
 
 @dataclass(frozen=True)
@@ -243,7 +242,7 @@ def build_snapshot(db: Session, key: tuple) -> Snapshot:
     return Snapshot(key=key, system_prompt=prompt, sources=sources)
 
 
-_snapshot: Optional[Snapshot] = None
+_snapshot: Snapshot | None = None
 
 
 def snapshot(db: Session) -> Snapshot:
@@ -283,19 +282,19 @@ class Answer:
         self,
         snap: Snapshot,
         question: str,
-        quote: Optional[str] = None,
-        page: Optional[str] = None,
+        quote: str | None = None,
+        page: str | None = None,
     ) -> None:
         self.snapshot = snap
         self.question = question
         self.quote = quote
         self.page = page
         self.text = ""
-        self.output_tokens: Optional[int] = None
+        self.output_tokens: int | None = None
         # The model hit ASK_MAX_TOKENS: the answer ends mid-sentence.
         self.truncated = False
-        self._client: Optional[httpx.AsyncClient] = None
-        self._response: Optional[httpx.Response] = None
+        self._client: httpx.AsyncClient | None = None
+        self._response: httpx.Response | None = None
         self._sent = 0.0
 
     def message(self) -> str:

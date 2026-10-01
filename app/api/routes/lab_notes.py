@@ -1,4 +1,3 @@
-from typing import Optional
 from uuid import UUID
 
 from api.dependencies import CurrentAdmin
@@ -26,7 +25,7 @@ router = APIRouter()
 async def get_all_lab_notes_admin(
     _admin: CurrentAdmin,
     db: Session = Depends(get_db),
-    tag: Optional[str] = Query(None),
+    tag: str | None = Query(None),
     limit: int = Query(10, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ):
@@ -139,7 +138,7 @@ async def delete_lab_note(
 @router.get("/lab-notes")
 async def get_lab_notes(
     db: Session = Depends(get_db),
-    tag: Optional[str] = Query(None),
+    tag: str | None = Query(None),
     limit: int = Query(10, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ):

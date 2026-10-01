@@ -19,7 +19,6 @@ Design and trade-offs: homelab docs/13-background-jobs.md.
 import asyncio
 import time
 from collections.abc import Awaitable, Callable
-from typing import Optional
 
 from loguru import logger
 from prometheus_client import Counter, Histogram
@@ -172,7 +171,7 @@ class Worker:
                 await asyncio.sleep(5)
 
 
-async def queue_depth(redis: Redis, stream: str, group: str) -> Optional[dict]:
+async def queue_depth(redis: Redis, stream: str, group: str) -> dict | None:
     """Jobs not yet read (lag) and read but unacknowledged (pending)."""
     for info in await redis.xinfo_groups(stream):
         name = info["name"]

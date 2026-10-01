@@ -1,6 +1,5 @@
 """Category CRUD routes."""
 
-from typing import Optional
 from uuid import UUID
 
 from api.dependencies import CurrentAdmin
@@ -149,7 +148,7 @@ async def reorder_categories(
 @router.get("/categories")
 async def get_categories(
     db: Session = Depends(get_db),
-    include_counts: Optional[bool] = Query(False, description="Include project counts"),
+    include_counts: bool | None = Query(False, description="Include project counts"),
 ):
     """Public endpoint: Get all categories, optionally with project counts."""
     categories = db.query(Category).order_by(Category.order, Category.label).all()
