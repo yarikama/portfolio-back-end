@@ -92,7 +92,7 @@ async def ask(body: AskRequest, request: Request, db: Session = Depends(get_db))
     # streaming: a yield dependency is only torn down after the response.
     db.close()
 
-    events = stream(Answer(snap, body.question), slots)
+    events = stream(Answer(snap, body.question, body.quote, body.page), slots)
     try:
         # Runs the stream up to its connection to the model, so a model
         # that is down is still a plain 503 rather than a broken stream.
@@ -139,6 +139,11 @@ async def stream(answer: Answer, slots: asyncio.Semaphore) -> AsyncIterator[str]
                 f"{answer.output_tokens} tokens"
                 f"{' (cut at the limit)' if answer.truncated else ''}, cited "
                 f"{[s.id for s in citations]}: {answer.question!r}"
+                + (
+                    f" about a passage on {answer.page or '?'}: {answer.quote[:80]!r}"
+                    if answer.quote
+                    else ""
+                )
             )
         except ModelUnavailableError:
             raise  # before the first byte: the route answers 503

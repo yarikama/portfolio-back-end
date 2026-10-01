@@ -155,7 +155,7 @@ app/
 | `GET /api/v1/lab-notes`, `GET /api/v1/lab-notes/{slug}`, `GET /api/v1/lab-notes/tags` | Published lab notes |
 | `GET /api/v1/categories` | Project categories |
 | `POST /api/v1/contact` | Submit the contact form; the owner gets an email with the message (reply goes to the visitor) |
-| `POST /api/v1/ask` | `{"question"}` (up to 500 characters) → a server-sent event stream: `token` events `{"text"}`, then `done` `{"citations": [{"id", "kind", "title", "url"}], "truncated"}` (`truncated`: the answer hit `ASK_MAX_TOKENS` and ends mid-sentence), or `error` `{"detail"}` if the answer breaks off. `503` when the model is offline or busy. See [Ask about my work](#ask-about-my-work) |
+| `POST /api/v1/ask` | `{"question", "quote"?, "page"?}` (question up to 500 characters; `quote`: a passage the visitor highlighted on the site, up to 600, and `page`: the path it is on) → a server-sent event stream: `token` events `{"text"}`, then `done` `{"citations": [{"id", "kind", "title", "url"}], "truncated"}` (`truncated`: the answer hit `ASK_MAX_TOKENS` and ends mid-sentence), or `error` `{"detail"}` if the answer breaks off. `503` when the model is offline or busy. See [Ask about my work](#ask-about-my-work) |
 | `/api/v1/admin/...` | Create, edit, reorder and delete content, list contact messages, upload images. Needs `Authorization: Bearer <token>` |
 | `POST /api/v1/admin/complete` | Note autocomplete: `{"prefix", "title", "noteId"}` → `{"id", "suggestion"}` (empty when the model is unsure or unavailable). Admin only |
 | `POST /api/v1/admin/complete/{id}/feedback` | `{"outcome": "accepted" \| "rejected" \| "ignored", "acceptedChars"}`, recorded once per suggestion |
