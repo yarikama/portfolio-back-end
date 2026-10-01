@@ -38,9 +38,6 @@ dev = [
     "ipdb>=0.13.0",
     "fakeredis[lua]>=2.30",
 ]
-aws = [
-    "mangum>=0.17.0"
-]
 
 [tool.ruff]
 line-length = 88

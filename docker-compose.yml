@@ -7,7 +7,6 @@ services:
       - "8080:8080"
     volumes:
       - ./app:/app/
-      - ./ml/model:/app/ml/model/
       - ./.env.local:/app/.env:ro
     depends_on:
       - db
