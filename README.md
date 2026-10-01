@@ -22,6 +22,36 @@ The two models share one 8 GB laptop GPU, through Kubernetes time-slicing with a
 
 The diagram is code: edit [`docs/architecture.py`](docs/architecture.py) and run `uv run --with diagrams python docs/architecture.py` (needs Graphviz). It uses [mingrammer/diagrams](https://github.com/mingrammer/diagrams) and the vLLM logo from the vLLM project.
 
+## Milestones
+
+Built in January 2026 on Cloud Run and Neon, then moved onto a home server in late September 2026, where it grew a GPU and two self-hosted models.
+
+```mermaid
+timeline
+    title From Cloud Run to a home GPU cluster
+    section January 2026
+        Jan 19–25 : Portfolio site and FastAPI API
+                  : Projects, notes, admin, image uploads
+                  : Cloud Run and Neon
+    section September 2026
+        Sep 27–28 : Single-node k3s with the GPU on a laptop
+                  : API moved home behind Cloudflare Tunnel
+                  : Cloud Run removed
+        Sep 29 : PostgreSQL on CloudNativePG, backups to R2
+               : Argo CD GitOps, Sealed Secrets, deploy on merge
+               : Prometheus, Loki, alerts by email
+               : Note autocomplete on vLLM (Qwen3.5-0.8B)
+        Sep 30 : Rate limits in Redis, edge caching, tracing
+               : Image worker for WebP variants
+               : GPU time-slicing with priority preemption
+               : Ask chat (Qwen3.5-4B, CAG, streamed, cited)
+    section October 2026
+        Oct 1 : Ask about a highlighted passage
+              : Questions kept for review in the admin
+              : Follow-ups with conversation memory
+              : 24k context, lint, tests and CI on both repos
+```
+
 ## Design notes
 
 **Ask: cache-augmented generation, not RAG.** All published content, about 13k tokens (October 2026), fits in the model's 24k context. Instead of retrieving chunks, [`services/ask.py`](app/services/ask.py) puts every published project and note, plus the resume, into the system prompt. That prefix is the same for every question, so vLLM's prefix cache computes it once: the first token arrives in about 0.1–0.2 s once the cache is warm.
