@@ -34,7 +34,7 @@ The two models share one 8 GB laptop GPU, through Kubernetes time-slicing with a
 
 ## Design notes
 
-**Ask: cache-augmented generation, not RAG.** All published content is about 9k tokens. Instead of retrieving chunks, [`services/ask.py`](app/services/ask.py) puts every published project and note, plus the resume, into the system prompt. That prefix is the same for every question, so vLLM's prefix cache computes it once: the first token arrives in about 0.1–0.2 s once the cache is warm.
+**Ask: cache-augmented generation, not RAG.** All published content, about 13k tokens (October 2026), fits in the model's 24k context. Instead of retrieving chunks, [`services/ask.py`](app/services/ask.py) puts every published project and note, plus the resume, into the system prompt. That prefix is the same for every question, so vLLM's prefix cache computes it once: the first token arrives in about 0.1–0.2 s once the cache is warm.
 - **Freshness.** The prompt is rebuilt whenever published content changes, and drafts never enter it.
 - **Citations.** The model cites `[P1]`, `[N1]` or `[R1]`. Citations to ids that don't exist are dropped before they reach the client.
 - **Size guard.** A token estimate guards the context window. The `ask_prompt_tokens` metric triggers an alert well before the limit. If the limit is reached anyway, the oldest notes are left out first, so the chat keeps working.
