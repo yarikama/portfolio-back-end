@@ -168,7 +168,7 @@ Per visitor (the `CF-Connecting-IP` address that Cloudflare sets; IPv6 grouped b
 |------|-------|-----------|------------------|
 | Login | 5 attempts per 15 minutes; a successful login clears the count | Sliding log | Refuse (`503`) |
 | Contact form | 3 messages per hour | Sliding log | Allow |
-| Chat questions | 10 per hour per visitor, and 500 a day for the whole site | Sliding log; token bucket | Allow |
+| Chat questions | 10 per hour per visitor, and 500 a day for the whole site; not counted with a valid admin token | Sliding log; token bucket | Allow |
 | Every other `/api/` request except `/api/v1/admin/*` and preflights | Bursts of 60, then 1 per second | Token bucket | Allow |
 
 Design and trade-offs: homelab `docs/11-rate-limiting.md`.

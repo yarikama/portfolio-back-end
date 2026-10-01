@@ -9,6 +9,7 @@ import httpx
 import pytest
 from api.routes import ask as ask_route
 from core import config
+from core.security import create_access_token
 from db.dependency import get_db
 from db.models.category import Category
 from db.models.lab_notes import LabNote
@@ -533,6 +534,55 @@ async def test_every_visitor_counts_against_the_daily_site_budget(
 
     bucket = await redis.hgetall(RateLimiter.key(ask_route.ASK_ALL, "all"))
     assert float(bucket[b"tokens"]) == pytest.approx(ask_route.ASK_ALL.limit - 2, 0.01)
+
+
+def admin_headers(ip, username=None, secret=None):
+    token = create_access_token(
+        {"sub": username or config.ADMIN_USERNAME}, secret or str(config.SECRET_KEY)
+    )
+    return {"CF-Connecting-IP": ip, "Authorization": f"Bearer {token}"}
+
+
+@pytest.mark.anyio
+async def test_the_admin_is_not_limited(model, limited_client, redis):
+    model(model_stream(["Hi."]))
+    headers = admin_headers("203.0.113.9")
+
+    codes = [
+        (
+            await limited_client.post(
+                "/api/v1/ask", json={"question": "Hi?"}, headers=headers
+            )
+        ).status_code
+        for _ in range(ASK.limit + 2)
+    ]
+
+    assert codes == [200] * (ASK.limit + 2)
+    assert await redis.exists(RateLimiter.key(ASK, "203.0.113.9")) == 0
+    assert await redis.exists(RateLimiter.key(ask_route.ASK_ALL, "all")) == 0
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "headers",
+    [
+        admin_headers("203.0.113.10", username="someone-else"),
+        admin_headers("203.0.113.10", secret="not-the-secret"),
+        {"CF-Connecting-IP": "203.0.113.10", "Authorization": "Bearer nonsense"},
+    ],
+    ids=["other user", "wrong signature", "not a token"],
+)
+async def test_other_tokens_are_counted_like_any_visitor(
+    model, limited_client, redis, headers
+):
+    model(model_stream(["Hi."]))
+
+    response = await limited_client.post(
+        "/api/v1/ask", json={"question": "Hi?"}, headers=headers
+    )
+
+    assert response.status_code == 200
+    assert await redis.exists(RateLimiter.key(ASK, "203.0.113.10")) == 1
 
 
 def test_every_ask_counter_series_exists_from_the_start():

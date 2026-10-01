@@ -19,6 +19,7 @@ from dataclasses import asdict
 
 from api.dependencies.rate_limit import rate_limit
 from core import config
+from core.security import decode_access_token
 from db.dependency import get_db
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
@@ -69,20 +70,35 @@ def busy() -> HTTPException:
     return unavailable("Busy answering other questions. Try again shortly.", 10)
 
 
+def is_admin(request: Request) -> bool:
+    """
+    A valid admin token: the owner trying the chat is not limited. Any other
+    token, valid or not, is simply a visitor: the route is public.
+    """
+    scheme, _, token = request.headers.get("Authorization", "").partition(" ")
+    if scheme.lower() != "bearer" or not token:
+        return False
+    payload = decode_access_token(token, str(config.SECRET_KEY))
+    return payload is not None and payload.get("sub") == config.ADMIN_USERNAME
+
+
 @router.post("/ask")
 async def ask(body: AskRequest, request: Request, db: Session = Depends(get_db)):
     # The limits are counted here, not as route dependencies, so questions
     # refused before reaching the model do not use them up: malformed (422,
     # checked before this runs), switched off, or all slots busy. A visitor
-    # retrying while the GPU is busy is not locked out for the hour.
+    # retrying while the GPU is busy is not locked out for the hour. The
+    # owner, logged in, is not counted at all; the GPU slots still apply.
     slots = generating()
+    admin = is_admin(request)
     if not config.ASK_URL:
         REQUESTS.labels("unavailable").inc()
         raise offline()
     if slots.locked():
         raise busy()
-    await ask_limit(request)
-    await site_limit(request)
+    if not admin:
+        await ask_limit(request)
+        await site_limit(request)
     if slots.locked():  # taken while the limits were checked
         raise busy()
 
@@ -92,7 +108,7 @@ async def ask(body: AskRequest, request: Request, db: Session = Depends(get_db))
     # streaming: a yield dependency is only torn down after the response.
     db.close()
 
-    events = stream(Answer(snap, body.question, body.quote, body.page), slots)
+    events = stream(Answer(snap, body.question, body.quote, body.page), slots, admin)
     try:
         # Runs the stream up to its connection to the model, so a model
         # that is down is still a plain 503 rather than a broken stream.
@@ -109,7 +125,9 @@ async def ask(body: AskRequest, request: Request, db: Session = Depends(get_db))
     )
 
 
-async def stream(answer: Answer, slots: asyncio.Semaphore) -> AsyncIterator[str]:
+async def stream(
+    answer: Answer, slots: asyncio.Semaphore, admin: bool = False
+) -> AsyncIterator[str]:
     """
     The GPU slot and the model connection are taken inside the generator,
     and the route starts it before returning: from then on its cleanup runs
@@ -134,8 +152,10 @@ async def stream(answer: Answer, slots: asyncio.Semaphore) -> AsyncIterator[str]
             REQUESTS.labels("answered").inc()
             # The question is logged (Loki keeps it for its retention
             # period) to see what visitors ask; the visitor's address is not.
+            # "Ask (admin)": the owner's own questions, apart from visitors'.
             logger.info(
-                f"Ask: answered in {time.perf_counter() - started:.1f}s, "
+                f"Ask{' (admin)' if admin else ''}: answered in "
+                f"{time.perf_counter() - started:.1f}s, "
                 f"{answer.output_tokens} tokens"
                 f"{' (cut at the limit)' if answer.truncated else ''}, cited "
                 f"{[s.id for s in citations]}: {answer.question!r}"
