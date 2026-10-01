@@ -47,6 +47,7 @@ def main() -> None:
     for p in projects:
         obj = SimpleNamespace(
             title=p["title"],
+            slug=p["slug"],
             year=p["year"],
             tags=p["tags"],
             description=p["description"],
@@ -68,7 +69,7 @@ def main() -> None:
         )
         note_docs.append((obj, ask._note_text(obj)))
 
-    prompt, sources = ask._render(project_docs, note_docs)
+    prompt, _, _ = ask._render(project_docs, note_docs)
     if ask.estimate_tokens(prompt) > ask.prompt_budget():
         # Production would leave the oldest documents out (build_snapshot)
         # and renumber the rest; this prompt would no longer match it.

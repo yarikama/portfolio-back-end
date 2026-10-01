@@ -25,7 +25,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from loguru import logger
 from schemas.ask import AskRequest
-from services.ask import REQUESTS, Answer, ModelUnavailableError, cited, snapshot
+from services.ask import REQUESTS, Answer, ModelUnavailableError, snapshot
 from services.rate_limit import ASK, ASK_ALL, ASK_ALL_CLIENTS
 from sqlalchemy.orm import Session
 
@@ -141,7 +141,7 @@ async def stream(
             started = time.perf_counter()
             async for piece in answer.tokens():
                 yield event("token", {"text": piece})
-            citations = cited(answer.text, answer.snapshot.sources)
+            citations = answer.citations()
             yield event(
                 "done",
                 {
