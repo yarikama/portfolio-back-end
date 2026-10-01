@@ -186,8 +186,12 @@ async def get_lab_note(
     db: Session = Depends(get_db),
     slug: str = Path(..., min_length=1, max_length=255),
 ):
-    """Public endpoint: Get a single lab note by slug."""
-    lab_note = db.query(LabNote).filter(LabNote.slug == slug).first()
+    """Public endpoint: Get a single published lab note by slug."""
+    lab_note = (
+        db.query(LabNote)
+        .filter(LabNote.slug == slug, LabNote.published.is_(True))
+        .first()
+    )
     if not lab_note:
         raise HTTPException(status_code=404, detail="Lab note not found")
     return {"data": LabNoteResponse.model_validate(lab_note)}

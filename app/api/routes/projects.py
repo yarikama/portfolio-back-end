@@ -241,11 +241,11 @@ async def get_project(
     slug: str = Path(..., min_length=1, max_length=255),
     db: Session = Depends(get_db),
 ):
-    """Public endpoint: Get a single project by slug."""
+    """Public endpoint: Get a single published project by slug."""
     project = (
         db.query(Project)
         .options(joinedload(Project.category_rel))
-        .filter(Project.slug == slug)
+        .filter(Project.slug == slug, Project.published.is_(True))
         .first()
     )
     if not project:
