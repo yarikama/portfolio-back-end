@@ -16,21 +16,52 @@ It is built with FastAPI and PostgreSQL. It runs on a single-node k3s cluster on
 
 ## Architecture
 
-```
-www.yarikama.com (Vercel) ──▶ api.yarikama.com ──▶ Cloudflare Tunnel
-                                                        │
-  ┌─────────────────────── k3s on a home server ───────▼──────────────────────────┐
-  │  Traefik ──▶ FastAPI (this repo) ──┬──▶ PostgreSQL 17 (CloudNativePG)          │
-  │                                    │        └─ WAL + daily backups ──▶ R2      │
-  │                                    ├──▶ Redis: rate limits, job queue          │
-  │                                    ├──▶ vLLM: Qwen3.5-4B AWQ (ask)      ┐ one  │
-  │                                    └──▶ vLLM: Qwen3.5-0.8B (autocomplete) ┘ GPU │
-  │  Image worker (this repo, same image) ──▶ R2: images and WebP variants         │
-  │  Prometheus, Loki, Tempo, Grafana, Alertmanager                                │
-  └────────────────────────────────────────────────────────────────────────────────┘
-```
+![Architecture: visitors reach the API through Cloudflare and a tunnel into a single-node k3s cluster at home, where FastAPI talks to PostgreSQL, Redis and two vLLM models on one GPU; GitHub Actions and Argo CD deploy it, and backups and images go to Cloudflare R2](docs/architecture.png)
 
 The two models share one 8 GB laptop GPU, through Kubernetes time-slicing with a fixed memory budget for each. The cluster is managed with GitOps (Argo CD). Its manifests and runbooks live in a separate, private `homelab` repo. References below to "homelab `docs/…`" point there.
+
+The diagram is code: edit [`docs/architecture.py`](docs/architecture.py) and run `uv run --with diagrams python docs/architecture.py` (needs Graphviz). It uses [mingrammer/diagrams](https://github.com/mingrammer/diagrams) and the vLLM logo from the vLLM project.
+
+## Milestones
+
+Built in January 2026 on Cloud Run and Neon, then moved onto a home server in late September 2026, where it grew a GPU and two self-hosted models.
+
+```mermaid
+timeline
+    title From Cloud Run to a home GPU cluster
+    section January 2026
+        Jan 19–25 : Portfolio site and FastAPI API
+                  : Projects, notes, admin, image uploads
+                  : Cloud Run and Neon
+    section September 2026
+        Sep 27–28 : Single-node k3s with the GPU on a laptop
+                  : API moved home behind Cloudflare Tunnel
+                  : Cloud Run removed
+        Sep 29 : PostgreSQL on CloudNativePG, backups to R2
+               : Argo CD GitOps, Sealed Secrets, deploy on merge
+               : Prometheus, Loki, alerts by email
+               : Note autocomplete on vLLM (Qwen3.5-0.8B)
+        Sep 30 : Rate limits in Redis, edge caching, tracing
+               : Image worker for WebP variants
+               : GPU time-slicing with priority preemption
+               : Ask chat (Qwen3.5-4B, CAG, streamed, cited)
+    section October 2026
+        Oct 1 : Ask about a highlighted passage
+              : Questions kept for review in the admin
+              : Follow-ups with conversation memory
+              : 24k context, lint, tests and CI on both repos
+```
+
+## Roadmap
+
+Planned, not promised; each item has a reason or a trigger.
+
+- [ ] **Learn from real questions.** Rate answers in the admin's Questions page, and grow the 40-question evaluation set in [`eval/ask/`](eval/ask/) from them.
+- [ ] **Retrieval when the content outgrows the context.** Once the prompt nears its budget (the `AskPromptNearLimit` alert), the next step is a narrow agent with two tools, `search` over PostgreSQL full-text and `read` by document id. The evaluation set decides whether it beats reading everything.
+- [ ] **Autocomplete, data and evaluation.** An admin page for suggestions and their outcomes, and offline evaluation against what was actually written.
+- [ ] **Autocomplete, fine-tuning.** LoRA on the home GPU as a Kubernetes Job that pre-empts both models, with adapters stored in R2 and served by vLLM.
+- [ ] **Autocomplete, reinforcement learning.** DPO from accepted and rejected suggestions, then GRPO with a verifiable reward, and A/B tests of adapters.
+- [ ] **A small decision model.** Classify contact messages with a fine-tuned encoder on the CPU, compared with the answer model's structured outputs.
 
 ## Design notes
 
