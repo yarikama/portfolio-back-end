@@ -281,7 +281,7 @@ def plain(text: str) -> str:
     return " ".join(text.split()).lower()
 
 
-def source_of(snap: Snapshot, quote: str, page: Optional[str]) -> Optional[Source]:
+def source_of(snap: Snapshot, quote: str, page: str | None) -> Source | None:
     """
     The document a highlighted passage comes from, so the model can cite it.
     A note's page is that note. Elsewhere (the works page has every project)
