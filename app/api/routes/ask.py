@@ -25,9 +25,11 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from loguru import logger
 from schemas.ask import AskRequest
+from services import ask_log
 from services.ask import REQUESTS, Answer, ModelUnavailableError, snapshot
 from services.rate_limit import ASK, ASK_ALL, ASK_ALL_CLIENTS
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 router = APIRouter()
 
@@ -125,6 +127,27 @@ async def ask(body: AskRequest, request: Request, db: Session = Depends(get_db))
     )
 
 
+async def store(
+    answer: Answer, citations: list, status: str, started: float, admin: bool
+) -> None:
+    """Keep the question and its answer (services/ask_log.py)."""
+    await run_in_threadpool(
+        ask_log.record,
+        ask_log.Entry(
+            question=answer.question,
+            quote=answer.quote,
+            page=answer.page,
+            answer=answer.text,
+            citations=[asdict(s) for s in citations],
+            status=status,
+            truncated=answer.truncated,
+            output_tokens=answer.output_tokens,
+            duration_ms=round((time.perf_counter() - started) * 1000),
+            admin=admin,
+        ),
+    )
+
+
 async def stream(
     answer: Answer, slots: asyncio.Semaphore, admin: bool = False
 ) -> AsyncIterator[str]:
@@ -135,6 +158,7 @@ async def stream(
     byte is sent and the response never iterates it.
     """
     async with slots:
+        started = time.perf_counter()
         try:
             await answer.open()
             yield ""  # connected; the route takes this, the visitor never sees it
@@ -165,6 +189,7 @@ async def stream(
                     else ""
                 )
             )
+            await store(answer, citations, "answered", started, admin)
         except ModelUnavailableError:
             raise  # before the first byte: the route answers 503
         except asyncio.CancelledError:
@@ -177,6 +202,7 @@ async def stream(
             REQUESTS.labels("error").inc()
             logger.error(f"Ask: answer broke off: {error!r}")
             yield event("error", {"detail": "The answer broke off. Try again."})
+            await store(answer, [], "error", started, admin)
         finally:
             # Also runs when the visitor leaves mid-answer: closing the
             # connection makes vLLM stop generating.

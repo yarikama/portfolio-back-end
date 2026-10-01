@@ -106,3 +106,7 @@ ASK_CONTEXT_TOKENS: int = config("ASK_CONTEXT_TOKENS", cast=int, default=16384)
 # Answers generated at once; one more gets 503 at once instead of waiting
 # behind them on a GPU that cannot go any faster.
 ASK_MAX_CONCURRENT: int = config("ASK_MAX_CONCURRENT", cast=int, default=4)
+# Questions asked in the chat are kept this long (services/ask_log.py).
+ASK_QUESTION_RETENTION_DAYS: int = config(
+    "ASK_QUESTION_RETENTION_DAYS", cast=int, default=30
+)

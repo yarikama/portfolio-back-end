@@ -18,7 +18,7 @@ from db.session import Base
 from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
 from main import get_application
-from services import ask
+from services import ask, ask_log
 from services.rate_limit import ASK, RateLimiter
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -265,6 +265,15 @@ def model(monkeypatch):
     return serve
 
 
+@pytest.fixture(autouse=True)
+def stored(monkeypatch):
+    """What the route stores of each question, instead of the database
+    (tests/test_ask_questions.py covers the database side)."""
+    entries = []
+    monkeypatch.setattr(ask_log, "record", entries.append)
+    return entries
+
+
 class FakeSession:
     closed = False
 
@@ -338,6 +347,47 @@ def test_a_model_error_mid_stream_ends_with_an_error_event(model, client):
 
     assert got[-1][0] == "error"
     assert "done" not in [name for name, _ in got]
+
+
+def test_each_question_is_stored_with_its_answer(model, client, stored):
+    model(model_stream(["It says matrices rotate."], usage=7))
+
+    client.post(
+        "/api/v1/ask",
+        json={
+            "question": "Why?",
+            "quote": "Any matrix is a rotation.",
+            "page": "/notes/svd",
+        },
+        headers=admin_headers("203.0.113.20"),
+    )
+
+    [entry] = stored
+    assert (entry.question, entry.quote, entry.page) == (
+        "Why?",
+        "Any matrix is a rotation.",
+        "/notes/svd",
+    )
+    assert entry.answer == "It says matrices rotate."
+    assert entry.status == "answered"
+    assert (entry.output_tokens, entry.truncated, entry.admin) == (7, False, True)
+    assert entry.duration_ms >= 0
+
+
+def test_a_broken_off_answer_is_stored_as_an_error(model, client, stored):
+    model(
+        'data: {"choices": [{"delta": {"content": "He "}}]}\n\n'
+        'data: {"error": {"message": "engine died"}}\n\ndata: [DONE]\n\n'
+    )
+    client.post("/api/v1/ask", json={"question": "Hi?"})
+
+    [entry] = stored
+    assert (entry.status, entry.answer, entry.citations, entry.admin) == (
+        "error",
+        "He ",
+        [],
+        False,
+    )
 
 
 def test_whitespace_around_a_question_does_not_count_toward_its_length(model, client):

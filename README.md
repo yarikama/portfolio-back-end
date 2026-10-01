@@ -39,6 +39,7 @@ The two models share one 8 GB laptop GPU, through Kubernetes time-slicing with a
 - **Citations.** The model cites `[P1]`, `[N1]` or `[R1]`. Citations to ids that don't exist are dropped before they reach the client.
 - **Size guard.** A token estimate guards the context window. The `ask_prompt_tokens` metric triggers an alert well before the limit. If the limit is reached anyway, the oldest notes are left out first, so the chat keeps working.
 - **Highlighted passages.** The backend works out which document a passage comes from: a note's page, or else the one document containing the text. It tells the model, and lists that document first among the citations even when the model forgets to cite it.
+- **Questions are kept.** Each question, its answer and citations go to the `ask_questions` table for 30 days, without the visitor's address. The admin area lists them, filters for answers that cite nothing or broke off, and rates answers good or bad, which turns real questions into evaluation data.
 - **Injection.** The visitor's question and any highlighted passage are treated as untrusted. The model has no tools, so an injected instruction can only change the text of an answer.
 - **Model choice.** The model was chosen, and prompt changes are checked, with a 40-question evaluation set in [`eval/ask/`](eval/ask/).
 
@@ -170,6 +171,7 @@ app/
 │   └── cache.py            ETag, Cache-Control and CORS for cacheable responses
 ├── services/
 │   ├── ask.py              Prompt snapshot, citation checking, streaming answers
+│   ├── ask_log.py          Keeping each question and answer for 30 days
 │   ├── autocomplete.py     Prompting, confidence cut-off, repetition trimming
 │   ├── rate_limit.py       Lua-scripted sliding logs and token buckets
 │   ├── jobs.py             At-least-once queue on Redis Streams
@@ -211,6 +213,7 @@ tests/                      pytest suite
 | `ASK_MODEL`, `ASK_MAX_TOKENS`, `ASK_TEMPERATURE` | Model name to request, answer length cap in tokens (Chinese takes about one per character), sampling temperature | `ask`, `800`, `0.3` |
 | `ASK_CONTEXT_TOKENS` | The answer model's context length (vLLM `--max-model-len`); the system prompt gets what the question and the answer leave | `16384` |
 | `ASK_MAX_CONCURRENT` | Answers generated at once; past this the API answers `503` right away | `4` |
+| `ASK_QUESTION_RETENTION_DAYS` | How long questions asked in the chat are kept in `ask_questions` | `30` |
 
 ## API
 
@@ -225,6 +228,8 @@ tests/                      pytest suite
 | `POST /api/v1/contact` | The contact form. The owner gets an email with the message; replying answers the visitor |
 | `POST /api/v1/ask` | A question about the owner's work, answered as a server-sent event stream (below). `503` when the model is offline or busy |
 | `/api/v1/admin/...` | Create, edit, reorder and delete content, list contact messages, upload images. Needs `Authorization: Bearer <token>` |
+| `GET /api/v1/admin/ask/questions` | Questions asked in the chat, newest first. Filters: `who` (`visitors`, the default, `admin` or `all`), `uncited`, `passage`, `failed` (cut off or broken off), `rating` (`good`, `bad` or `none`) |
+| `PATCH /api/v1/admin/ask/questions/{id}` | `{"rating": "good" \| "bad" \| null}` |
 | `POST /api/v1/admin/complete` | Note autocomplete: `{"prefix", "title", "noteId"}` → `{"id", "suggestion"}` (empty when the model is unsure or unavailable) |
 | `POST /api/v1/admin/complete/{id}/feedback` | `{"outcome": "accepted" \| "rejected" \| "ignored", "acceptedChars"}`, recorded once per suggestion |
 
