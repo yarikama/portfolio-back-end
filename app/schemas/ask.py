@@ -29,3 +29,8 @@ class AskRequest(BaseSchema):
         Annotated[str, StringConstraints(max_length=200, pattern=r"^/[\w\-./%]*$")]
         | None
     ) = None
+    # The id the previous answer's done event gave, to continue that
+    # conversation (services/ask_history.py).
+    conversation: (
+        Annotated[str, StringConstraints(max_length=64, pattern=r"^[\w-]+$")] | None
+    ) = None
