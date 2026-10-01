@@ -38,6 +38,7 @@ The two models share one 8 GB laptop GPU, through Kubernetes time-slicing with a
 - **Freshness.** The prompt is rebuilt whenever published content changes, and drafts never enter it.
 - **Citations.** The model cites `[P1]`, `[N1]` or `[R1]`. Citations to ids that don't exist are dropped before they reach the client.
 - **Size guard.** A token estimate guards the context window. The `ask_prompt_tokens` metric triggers an alert well before the limit. If the limit is reached anyway, the oldest notes are left out first, so the chat keeps working.
+- **Highlighted passages.** The backend works out which document a passage comes from: a note's page, or else the one document containing the text. It tells the model, and lists that document first among the citations even when the model forgets to cite it.
 - **Injection.** The visitor's question and any highlighted passage are treated as untrusted. The model has no tools, so an injected instruction can only change the text of an answer.
 - **Model choice.** The model was chosen, and prompt changes are checked, with a 40-question evaluation set in [`eval/ask/`](eval/ask/).
 
@@ -241,7 +242,7 @@ Response: a stream of server-sent events.
 | Event | Data |
 |---|---|
 | `token` | `{"text"}`: the next piece of the answer |
-| `done` | `{"citations": [{"id", "kind", "title", "url"}], "truncated"}`: the sources the answer cited, in order. `truncated` means the answer hit `ASK_MAX_TOKENS` |
+| `done` | `{"citations": [{"id", "kind", "title", "url"}], "truncated"}`: the sources the answer cited, in order; for a passage, the document it comes from is first. `truncated` means the answer hit `ASK_MAX_TOKENS` |
 | `error` | `{"detail"}`: the answer broke off |
 
 Design and when to switch to retrieval: homelab `docs/14-ask-chat-plan.md`.

@@ -398,6 +398,89 @@ def test_a_highlighted_passage_goes_to_the_model_before_the_question(model, clie
     )
 
 
+# Where passages come from: a note at its own page, a project only on /works.
+PLACED = ask.Snapshot(
+    key=(),
+    system_prompt="RULES AND DOCUMENTS",
+    sources=SOURCES,
+    texts={
+        "R1": ask.plain("Henry Hsu. M.C.S., Rice University."),
+        "P1": ask.plain(
+            "PAPIT (2026)\nTrained a **1.3M-parameter scorer** that distills where "
+            "[LLaVA-1.5-7B](https://llava.dev) actually attends."
+        ),
+        "N1": ask.plain("SVD (2026-02-05)\n\n## Rotations\nAny matrix is a rotation."),
+    },
+)
+
+
+def test_markdown_is_read_as_the_page_shows_it():
+    assert ask.plain("A **bold** [link](https://x.y) `code`\n\n## Next") == (
+        "a bold link code next"
+    )
+
+
+@pytest.mark.parametrize(
+    "quote, page, expected",
+    [
+        # A note's page is that note, whatever the passage.
+        ("Something rendered as math", "/notes/svd", "N1"),
+        # The works page has every project: the passage tells which.
+        (
+            "Trained a 1.3M-parameter scorer that distills where LLaVA-1.5",
+            "/works",
+            "P1",
+        ),
+        # Cut by the site, with an ellipsis.
+        ("trained a 1.3M-parameter   scorer that…", "/works", "P1"),
+        # Not in any document, or in more than one: no guess.
+        ("Ask about my work", "/", None),
+        ("Trained a 1.3M-parameter scorer and a matrix is a rotation", "/works", None),
+        # Too short to place.
+        ("PAPIT", "/works", None),
+    ],
+)
+def test_the_document_a_passage_comes_from(quote, page, expected):
+    source = ask.source_of(PLACED, quote, page)
+    assert (source.id if source else None) == expected
+
+
+def test_the_model_is_told_which_document_the_passage_is_in():
+    message = ask.Answer(PLACED, "Why?", "Any matrix is a rotation.", "/notes/svd")
+    assert message.message().startswith(
+        "I highlighted this passage in [N1] on /notes/svd:\n<passage>\n"
+    )
+
+
+@pytest.mark.parametrize(
+    "reply, expected",
+    [
+        # Explained without citing where the passage is: listed anyway, first.
+        (["It says matrices rotate [P1]."], ["N1", "P1"]),
+        # Cited by the model: listed once, where the model put it.
+        (["From [R1] and [N1]."], ["R1", "N1"]),
+    ],
+)
+def test_an_answer_about_a_passage_lists_its_document(
+    model, client, monkeypatch, reply, expected
+):
+    monkeypatch.setattr(ask_route, "snapshot", lambda db: PLACED)
+    model(model_stream(reply))
+
+    response = client.post(
+        "/api/v1/ask",
+        json={
+            "question": "Why?",
+            "quote": "Any matrix is a rotation.",
+            "page": "/notes/svd",
+        },
+    )
+
+    done = events(response.text)[-1]
+    assert done[0] == "done"
+    assert [c["id"] for c in done[1]["citations"]] == expected
+
+
 def test_a_question_without_a_passage_is_sent_as_it_is(model, client):
     sent = model(model_stream(["Hi."]))
     client.post("/api/v1/ask", json={"question": "Hi?", "page": "/works"})
@@ -423,7 +506,7 @@ def test_long_or_blank_passages_and_odd_pages_are_rejected(model, client, extra)
 def test_the_question_and_passage_fit_the_room_kept_for_them():
     # All-Chinese, the worst case: about a token per character.
     longest = ask.Answer(
-        SNAPSHOT, "問" * ask.MAX_QUESTION_CHARS, "段" * ask.MAX_QUOTE_CHARS, "/notes/x"
+        PLACED, "問" * ask.MAX_QUESTION_CHARS, "段" * ask.MAX_QUOTE_CHARS, "/notes/svd"
     ).message()
     assert ask.estimate_tokens(longest) <= ask.QUESTION_TOKENS
 
