@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import date
 
 from db.models.todo import AdminTodo
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -58,3 +58,19 @@ def for_day(db: Session, day: date) -> list[AdminTodo]:
         .order_by(AdminTodo.day, AdminTodo.created_at)
         .all()
     )
+
+
+def history(db: Session, limit: int) -> list[str]:
+    """What the owner has written as to-dos, most recent first and each
+    once, for completing a new one as it is typed. Daily items and removed
+    ones are left out."""
+    latest = func.max(AdminTodo.created_at)
+    rows = (
+        db.query(AdminTodo.text, latest)
+        .filter(AdminTodo.daily_key.is_(None), AdminTodo.removed.is_(False))
+        .group_by(AdminTodo.text)
+        .order_by(latest.desc())
+        .limit(limit)
+        .all()
+    )
+    return [text for text, _ in rows]
