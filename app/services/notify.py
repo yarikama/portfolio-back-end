@@ -1,7 +1,8 @@
 """
 Tells the owner about new contact messages by email (Gmail SMTP with an app
-password). There is no admin page for messages, so the email carries the
-whole message, and replying to it answers the visitor directly.
+password). The email carries the whole message, so it can be read and
+answered from the inbox (replying answers the visitor directly); the admin's
+Messages page lists them too.
 """
 
 import smtplib

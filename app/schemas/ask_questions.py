@@ -31,3 +31,16 @@ class AskQuestionResponse(BaseSchema):
 class AskQuestionRating(BaseSchema):
     # null clears it.
     rating: Literal["good", "bad"] | None
+
+
+class NewQuestions(BaseSchema):
+    """Visitors' questions since the admin last opened Questions."""
+
+    count: int
+    # None: never opened, so every question kept counts as new.
+    since: datetime | None
+
+
+class SeenQuestions(BaseSchema):
+    # When Questions was opened before this visit, to mark what is new.
+    previous: datetime | None

@@ -27,6 +27,7 @@ from db.models.contact import ContactMessage
 from db.models.category import Category
 from db.models.autocomplete import AutocompleteSuggestion
 from db.models.ask import AskQuestion
+from db.models.admin_seen import AdminSeen
 
 target_metadata = Base.metadata
 

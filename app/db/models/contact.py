@@ -10,9 +10,9 @@ class ContactMessage(Base):
     __tablename__ = "contact_messages"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    name = Column(String(100), nullable=False)
+    name = Column(Text, nullable=False)
     email = Column(String(255), nullable=False)
-    subject = Column(String(200), nullable=False)
+    subject = Column(Text, nullable=False)
     message = Column(Text, nullable=False)
     read = Column(Boolean, default=False)
     replied = Column(Boolean, default=False)

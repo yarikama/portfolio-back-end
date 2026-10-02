@@ -5,6 +5,7 @@ import pytest
 from api.dependencies.auth import get_current_admin
 from core import config
 from db.dependency import get_db
+from db.models.admin_seen import AdminSeen
 from db.models.ask import AskQuestion
 from db.session import Base
 from fastapi.testclient import TestClient
@@ -14,6 +15,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 PREFIX = "test-ask-log: "
+ADMIN = "owner@example.com"
 
 
 @pytest.fixture
@@ -30,6 +32,7 @@ def factory(monkeypatch):
         db.query(AskQuestion).filter(AskQuestion.question.startswith(PREFIX)).delete(
             synchronize_session=False
         )
+        db.query(AdminSeen).filter(AdminSeen.email == ADMIN).delete()
         db.commit()
 
 
@@ -61,7 +64,7 @@ def client(factory):
     app = get_application()
     app.dependency_overrides[get_db] = override_get_db
     # Signed in (tests/test_google_login.py covers how).
-    app.dependency_overrides[get_current_admin] = lambda: "owner@example.com"
+    app.dependency_overrides[get_current_admin] = lambda: ADMIN
     return TestClient(app)
 
 
@@ -143,3 +146,43 @@ def test_only_the_admin_reads_them(client):
     assert client.get("/api/v1/admin/ask/questions").status_code == 401
     missing = "/api/v1/admin/ask/questions/00000000-0000-0000-0000-000000000000"
     assert client.patch(missing, json={"rating": "good"}).status_code == 401
+
+
+def new_since_last_visit(client):
+    response = client.get("/api/v1/admin/ask/questions/new")
+    assert response.status_code == 200
+    return response.json()["data"]
+
+
+def test_visitors_questions_are_counted_since_the_last_visit(client, factory):
+    with factory() as db:
+        db.query(AdminSeen).filter(AdminSeen.email == ADMIN).delete()
+        db.commit()
+    assert new_since_last_visit(client)["since"] is None
+
+    first = client.post("/api/v1/admin/ask/questions/seen").json()["data"]
+    assert first["previous"] is None
+    assert new_since_last_visit(client)["count"] == 0
+
+    ask_log.record(entry("while away"))
+    ask_log.record(entry("mine", admin=True))  # the admin's own: not news
+    news = new_since_last_visit(client)
+    assert news["count"] == 1
+    assert news["since"] is not None
+
+    again = client.post("/api/v1/admin/ask/questions/seen").json()["data"]
+    assert again["previous"] == news["since"]
+    assert new_since_last_visit(client)["count"] == 0
+
+
+def test_each_admin_has_their_own_last_visit(client, factory):
+    client.post("/api/v1/admin/ask/questions/seen")
+    ask_log.record(entry("for both"))
+    client.app.dependency_overrides[get_current_admin] = lambda: "other@example.com"
+    try:
+        other = new_since_last_visit(client)
+        assert other["since"] is None
+        assert other["count"] >= 1
+    finally:
+        client.app.dependency_overrides[get_current_admin] = lambda: ADMIN
+    assert new_since_last_visit(client)["count"] == 1
