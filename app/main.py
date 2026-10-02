@@ -14,7 +14,15 @@ from fastapi.middleware.cors import CORSMiddleware
 
 def get_application() -> FastAPI:
     application = FastAPI(
-        title=PROJECT_NAME, debug=DEBUG, version=VERSION, lifespan=lifespan
+        title=PROJECT_NAME,
+        debug=DEBUG,
+        version=VERSION,
+        lifespan=lifespan,
+        # core/tracing.py exports the traces. Left on, FastAPI's own setup
+        # (0.142+) adds a second exporter from OTEL_EXPORTER_OTLP_ENDPOINT,
+        # sending every span twice, plus metrics and logs to Tempo, which
+        # takes only traces (404 every minute).
+        telemetry={"auto_configure": False},
     )
 
     # Before CORS, so that CORS wraps it and its 429s carry CORS headers.
