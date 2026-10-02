@@ -12,7 +12,7 @@ ENV_FILE := .env.${ENV}
 
 # Target section and Global definitions
 # -----------------------------------------------------------------------------
-.PHONY: all clean test install run deploy down lint format hash logs shell rebuild
+.PHONY: all clean test install run deploy down lint format logs shell rebuild
 
 all: clean install test
 
@@ -31,27 +31,6 @@ lint:
 format:
 	uv run ruff format app/
 	uv run ruff check --fix app/
-
-# The password is read by Python's getpass: it is not echoed, and never
-# passes through the shell or into the Python source.
-hash:
-	@hash=$$(uv run python -c "import bcrypt, getpass, sys; p = getpass.getpass('Enter password: '); sys.exit('Passwords do not match') if p != getpass.getpass('Confirm password: ') else print(bcrypt.hashpw(p.encode(), bcrypt.gensalt()).decode())") && \
-	echo "" && \
-	echo "Generated hash: $$hash" && \
-	echo "" && \
-	echo "Add this to .env file (no $$ escaping needed):" && \
-	echo "ADMIN_PASSWORD_HASH=$$hash" && \
-	echo "" && \
-	read -p "Update .env.local automatically? (y/n): " update && \
-	if [ "$$update" = "y" ]; then \
-		if grep -q "^ADMIN_PASSWORD_HASH=" .env.local 2>/dev/null; then \
-			sed -i.bak "s|^ADMIN_PASSWORD_HASH=.*|ADMIN_PASSWORD_HASH=$$hash|" .env.local && rm -f .env.local.bak && \
-			echo "✓ Updated ADMIN_PASSWORD_HASH in .env.local"; \
-		else \
-			echo "ADMIN_PASSWORD_HASH=$$hash" >> .env.local && \
-			echo "✓ Added ADMIN_PASSWORD_HASH to .env.local"; \
-		fi; \
-	fi
 
 deploy: generate_dot_env
 	@echo "Running in ${ENV} environment..."

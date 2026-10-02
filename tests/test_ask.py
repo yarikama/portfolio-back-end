@@ -9,7 +9,6 @@ import httpx
 import pytest
 from api.routes import ask as ask_route
 from core import config
-from core.security import create_access_token
 from db.dependency import get_db
 from db.models.category import Category
 from db.models.lab_notes import LabNote
@@ -355,18 +354,25 @@ def test_a_model_error_mid_stream_ends_with_an_error_event(model, client):
     assert "done" not in [name for name, _ in got]
 
 
-def test_each_question_is_stored_with_its_answer(model, client, stored):
+@pytest.mark.anyio
+async def test_each_question_is_stored_with_its_answer(
+    model, app, redis, sign_in, stored
+):
     model(model_stream(["It says matrices rotate."], usage=7))
+    app.state.redis = redis
 
-    client.post(
-        "/api/v1/ask",
-        json={
-            "question": "Why?",
-            "quote": "Any matrix is a rotation.",
-            "page": "/notes/svd",
-        },
-        headers=admin_headers("203.0.113.20"),
-    )
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        await client.post(
+            "/api/v1/ask",
+            json={
+                "question": "Why?",
+                "quote": "Any matrix is a rotation.",
+                "page": "/notes/svd",
+            },
+            headers=await sign_in(),
+        )
 
     [entry] = stored
     assert (entry.question, entry.quote, entry.page) == (
@@ -611,6 +617,7 @@ def test_a_broken_stream_ends_with_an_error_event(model, client):
 @pytest.fixture
 async def limited_client(app, redis):
     app.state.rate_limiter = RateLimiter(redis)
+    app.state.redis = redis
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
@@ -675,17 +682,10 @@ async def test_every_visitor_counts_against_the_daily_site_budget(
     assert float(bucket[b"tokens"]) == pytest.approx(ask_route.ASK_ALL.limit - 2, 0.01)
 
 
-def admin_headers(ip, username=None, secret=None):
-    token = create_access_token(
-        {"sub": username or config.ADMIN_USERNAME}, secret or str(config.SECRET_KEY)
-    )
-    return {"CF-Connecting-IP": ip, "Authorization": f"Bearer {token}"}
-
-
 @pytest.mark.anyio
-async def test_the_admin_is_not_limited(model, limited_client, redis):
+async def test_the_admin_is_not_limited(model, limited_client, redis, sign_in):
     model(model_stream(["Hi."]))
-    headers = admin_headers("203.0.113.9")
+    headers = {"CF-Connecting-IP": "203.0.113.9", **await sign_in()}
 
     codes = [
         (
@@ -703,21 +703,23 @@ async def test_the_admin_is_not_limited(model, limited_client, redis):
 
 @pytest.mark.anyio
 @pytest.mark.parametrize(
-    "headers",
-    [
-        admin_headers("203.0.113.10", username="someone-else"),
-        admin_headers("203.0.113.10", secret="a-different-key-" + "x" * 32),
-        {"CF-Connecting-IP": "203.0.113.10", "Authorization": "Bearer nonsense"},
-    ],
-    ids=["other user", "wrong signature", "not a token"],
+    "credential", ["no longer an admin", "unknown session", "bearer token"]
 )
-async def test_other_tokens_are_counted_like_any_visitor(
-    model, limited_client, redis, headers
+async def test_other_credentials_are_counted_like_any_visitor(
+    model, limited_client, redis, sign_in, credential
 ):
     model(model_stream(["Hi."]))
+    if credential == "no longer an admin":
+        headers = await sign_in("former@example.com")
+    elif credential == "unknown session":
+        headers = {"Cookie": "__Host-admin_session=guess"}
+    else:
+        headers = {"Authorization": "Bearer anything"}
 
     response = await limited_client.post(
-        "/api/v1/ask", json={"question": "Hi?"}, headers=headers
+        "/api/v1/ask",
+        json={"question": "Hi?"},
+        headers={"CF-Connecting-IP": "203.0.113.10", **headers},
     )
 
     assert response.status_code == 200

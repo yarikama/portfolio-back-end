@@ -51,9 +51,6 @@ class Rule:
     fail_open: bool
 
 
-# Guessing the admin password. Every attempt counts; a successful login
-# clears the count, so only a run of failures blocks.
-LOGIN = Rule("login", 5, 15 * 60, Algorithm.SLIDING_LOG, fail_open=False)
 # Contact form messages, which go straight into the database.
 CONTACT = Rule("contact", 3, 60 * 60, Algorithm.SLIDING_LOG, fail_open=True)
 # Every other public request. A page load makes a few API calls; 60 at once
@@ -68,9 +65,9 @@ ASK_ALL_CLIENTS = "all"
 
 # A labelled counter only exists after its first increment, and Prometheus's
 # increase() cannot see that first jump (there is no earlier sample): the
-# first login attack would never fire LoginRateLimited. Start every series
-# at 0 instead.
-for _rule in (LOGIN, CONTACT, PUBLIC, ASK, ASK_ALL):
+# first burst would never fire an alert on it. Start every series at 0
+# instead.
+for _rule in (CONTACT, PUBLIC, ASK, ASK_ALL):
     ERRORS.labels(_rule.name)
     for _decision in ("allowed", "rejected"):
         DECISIONS.labels(_rule.name, _decision)

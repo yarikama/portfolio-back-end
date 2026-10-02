@@ -1,15 +1,12 @@
 import os
 
 import pytest
+from core import config
 from fakeredis import FakeAsyncRedis
 from redis.asyncio import Redis
+from services import admin_session
 
-# A signing key for the tests, set before any test module imports the app's
-# configuration: the app refuses to sign or accept tokens with a missing or
-# short one.
-os.environ.setdefault(
-    "SECRET_KEY", "test-secret-key-for-the-test-suite-only-0123456789"
-)
+ADMIN = "owner@example.com"
 
 
 @pytest.fixture
@@ -29,3 +26,23 @@ async def redis():
     yield client
     await client.flushdb()
     await client.aclose()
+
+
+@pytest.fixture
+def sign_in(redis, monkeypatch):
+    """
+    Signs the admin in: returns the headers a page of the site sends, the
+    Cookie of a new session in `redis` and the site's Origin (needed on
+    anything but GET). The app under test must use that Redis
+    (app.state.redis = redis).
+    """
+    monkeypatch.setattr(config, "ADMIN_EMAILS", frozenset({ADMIN}))
+
+    async def cookie(email: str = ADMIN) -> dict[str, str]:
+        token = await admin_session.create(redis, email, 3600)
+        return {
+            "Cookie": f"{admin_session.COOKIE}={token}",
+            "Origin": "https://yarikama.com",
+        }
+
+    return cookie

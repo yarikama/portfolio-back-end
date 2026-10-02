@@ -7,15 +7,12 @@ import asyncio
 import uuid
 
 import pytest
-from core import config
-from core.security import get_password_hash
 from db.dependency import get_db
 from httpx import ASGITransport, AsyncClient
 from main import get_application
 from redis.asyncio import Redis
 from services.rate_limit import (
     CONTACT,
-    LOGIN,
     PUBLIC,
     Algorithm,
     RateLimiter,
@@ -154,10 +151,12 @@ async def test_unreachable_redis_fails_open_or_closed_per_rule():
     down = Redis.from_url("redis://127.0.0.1:1/0", socket_connect_timeout=0.25)
     limiter = RateLimiter(down)
 
+    closed = Rule("test-closed", 3, 60, Algorithm.SLIDING_LOG, fail_open=False)
+
     assert (await limiter.hit(CONTACT, "a")).allowed
     with pytest.raises(LimiterUnavailableError):
-        await limiter.hit(LOGIN, "a")
-    await limiter.reset(LOGIN, "a")  # does not raise
+        await limiter.hit(closed, "a")
+    await limiter.reset(closed, "a")  # does not raise
     await down.aclose()
 
 
@@ -195,56 +194,6 @@ async def client(app):
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
-
-
-@pytest.fixture
-def admin_password(monkeypatch):
-    monkeypatch.setattr(config, "ADMIN_USERNAME", "owner")
-    monkeypatch.setattr(config, "ADMIN_PASSWORD_HASH", get_password_hash("right"))
-    monkeypatch.setattr(config, "SECRET_KEY", "test-secret-long-enough-to-sign-tokens")
-    return "right"
-
-
-async def login(client, password, ip="203.0.113.9"):
-    return await client.post(
-        "/api/v1/auth/login",
-        json={"username": "owner", "password": password},
-        headers={"CF-Connecting-IP": ip},
-    )
-
-
-async def test_login_is_blocked_after_five_failures(client, admin_password):
-    failures = [(await login(client, "wrong")).status_code for _ in range(5)]
-    blocked = await login(client, admin_password)
-
-    assert failures == [401] * 5
-    assert blocked.status_code == 429
-    assert blocked.headers["retry-after"] == str(15 * 60)
-    assert blocked.json()["detail"] == (
-        "Too many login attempts. Try again in 15 minutes."
-    )
-    # Another visitor is not affected.
-    assert (await login(client, admin_password, ip="198.51.100.4")).status_code == 200
-
-
-async def test_successful_login_clears_the_failures(client, admin_password):
-    for _ in range(4):
-        await login(client, "wrong")
-    assert (await login(client, admin_password)).status_code == 200
-
-    failures = [(await login(client, "wrong")).status_code for _ in range(5)]
-
-    assert failures == [401] * 5
-
-
-async def test_login_is_refused_while_redis_is_down(app, client, admin_password):
-    down = Redis.from_url("redis://127.0.0.1:1/0", socket_connect_timeout=0.25)
-    app.state.rate_limiter = RateLimiter(down)
-
-    response = await login(client, admin_password)
-
-    assert response.status_code == 503
-    await down.aclose()
 
 
 class FakeSession:
@@ -310,7 +259,7 @@ async def test_admin_routes_and_preflights_are_not_counted(client, redis):
 def test_every_counter_series_exists_from_the_start():
     from prometheus_client import REGISTRY
 
-    for rule in ("login", "contact", "public"):
+    for rule in ("contact", "public", "ask", "ask_all"):
         for decision in ("allowed", "rejected"):
             labels = {"rule": rule, "decision": decision}
             assert (

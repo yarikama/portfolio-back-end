@@ -1,7 +1,6 @@
 from typing import Annotated
 
 from core import config
-from core.security import decode_access_token
 from fastapi import Depends, HTTPException, Request, status
 from loguru import logger
 from services import admin_session
@@ -13,25 +12,7 @@ SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 
 
 def unauthorized(detail: str) -> HTTPException:
-    return HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail=detail,
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-
-
-def bearer_admin(request: Request) -> str | None:
-    """
-    The admin named by a valid password-login token. Kept while the site
-    moves to Google sign-in; to be removed with password login.
-    """
-    scheme, _, token = request.headers.get("Authorization", "").partition(" ")
-    if scheme.lower() != "bearer" or not token:
-        return None
-    payload = decode_access_token(token, str(config.SECRET_KEY))
-    if payload is None or payload.get("sub") != config.ADMIN_USERNAME:
-        return None
-    return payload["sub"]
+    return HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=detail)
 
 
 async def session_admin(request: Request) -> str | None:
@@ -61,14 +42,14 @@ async def session_admin(request: Request) -> str | None:
 async def current_admin(request: Request) -> str | None:
     """The admin making the request, or None for a visitor."""
     email = await session_admin(request)
-    if email is not None:
-        if (
-            request.method not in SAFE_METHODS
-            and request.headers.get("Origin") not in config.CORS_ORIGINS
-        ):
-            return None
-        return email
-    return bearer_admin(request)
+    if email is None:
+        return None
+    if (
+        request.method not in SAFE_METHODS
+        and request.headers.get("Origin") not in config.CORS_ORIGINS
+    ):
+        return None
+    return email
 
 
 async def get_current_admin(request: Request) -> str:
