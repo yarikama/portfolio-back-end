@@ -80,7 +80,7 @@ Planned, not promised; each item has a reason or a trigger.
 - **Failures.** A slow or failed model gives an empty suggestion, never an error.
 - **Training data.** The outcome of each suggestion (accepted, typed along, rejected or ignored, and how many tokens were taken) is stored for later fine-tuning.
 
-**Rate limits that hold under concurrency.** Each check is a single Lua script in Redis, so reading, deciding and recording happen atomically ([`services/rate_limit.py`](app/services/rate_limit.py)). Two algorithms are used: sliding logs for small, exact budgets, and token buckets for bursts. Each rule chooses what happens when Redis is down: login fails closed, everything else fails open. A 429 still carries CORS headers, so the browser can show the message instead of a network error.
+**Rate limits that hold under concurrency.** Each check is a single Lua script in Redis, so reading, deciding and recording happen atomically ([`services/rate_limit.py`](app/services/rate_limit.py)). Two algorithms are used: sliding logs for small, exact budgets, and token buckets for bursts. Each rule chooses what happens when Redis is down; today's all fail open. The admin, whose sessions live in Redis, gets 503 instead. A 429 still carries CORS headers, so the browser can show the message instead of a network error.
 
 **Background jobs on Redis Streams.** [`services/jobs.py`](app/services/jobs.py) is a small at-least-once queue built on a consumer group.
 - **Retries.** A job is acknowledged only after it succeeds. A job whose worker died is claimed again by another worker (`XAUTOCLAIM`).
@@ -96,7 +96,6 @@ Planned, not promised; each item has a reason or a trigger.
 **Security.**
 - The admin signs in with Google: the API runs the OAuth authorization code flow with PKCE, a one-time state bound to the browser by a cookie, and a nonce, and lets in only the accounts in `ADMIN_EMAILS` ([`services/google_oauth.py`](app/services/google_oauth.py)). The site loads no script from Google.
 - The session is an `HttpOnly`, `Secure`, `SameSite=Strict` `__Host-` cookie, so page scripts cannot read it. Redis keeps only its SHA-256, and signing out deletes it at once. A request that changes something must also come from the site's own origin.
-- Password login with a bcrypt hash and short-lived JWTs (PyJWT, HS256) remains during the move to Google sign-in. A `SECRET_KEY` shorter than 32 characters, or unset, signs and accepts no token: login answers 503 instead of signing with a key anyone could use.
 - Request bodies are capped before anything reads them: 20 MB for image uploads, 2 MB for everything else (413 above that).
 - An upload is stored as what its bytes are (JPEG, PNG, GIF or WebP, checked with Pillow), never as the file name or type the browser claims, and only in the known folders (`images`, `notes`, `covers`).
 - CI runs `pip-audit` against the locked dependencies.
@@ -126,7 +125,6 @@ Requires [uv](https://docs.astral.sh/uv/) and Docker.
 make install                  # dependencies; also creates .env.local and .env.prod from .env.example
 cp .env.example .env          # make run reads .env
 docker-compose up -d db redis # local PostgreSQL on :5432 (postgres/postgres, database app) and Redis on :6379
-make hash                     # prompts for an admin password and prints its hash for ADMIN_PASSWORD_HASH
 make run                      # API with hot reload on http://localhost:8080
 ```
 
@@ -220,7 +218,7 @@ app/
 │   ├── images.py           WebP variants with Pillow
 │   ├── storage.py          Cloudflare R2
 │   └── notify.py           Contact-form emails
-├── core/                   Settings, JWT and bcrypt, tracing, logging, startup
+├── core/                   Settings, tracing, logging, startup
 ├── db/models/              SQLAlchemy models
 ├── schemas/                Pydantic request and response models (camelCase JSON)
 ├── alembic/                Migrations
@@ -234,10 +232,6 @@ tests/                      pytest suite
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `DATABASE_URL` | PostgreSQL connection string. In production it comes from CloudNativePG, not from `.env.prod` | `sqlite:///./app.db` |
-| `SECRET_KEY` | JWT signing key, at least 32 characters (shorter or unset, admin login is refused); changing it logs everyone out | empty (set it) |
-| `ADMIN_USERNAME` | Admin login username | `admin` |
-| `ADMIN_PASSWORD_HASH` | bcrypt hash of the admin password (`make hash`) | empty (set it) |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | Token lifetime | `120` |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | OAuth client (type "Web application") for Sign in with Google; empty turns it off | empty |
 | `GOOGLE_REDIRECT_URI` | The callback registered with that client | `https://api.yarikama.com/api/v1/auth/google/callback` |
 | `ADMIN_EMAILS` | Comma-separated Google accounts that may sign in | empty |
@@ -270,14 +264,13 @@ tests/                      pytest suite
 | `GET /api/v1/auth/google/login?next=/admin/...` | Starts Sign in with Google; Google then sends the browser to `/api/v1/auth/google/callback`, which sets the session cookie and returns to `next` |
 | `GET /api/v1/auth/me` | `{"email"}` of whoever is signed in; `401` if no one |
 | `POST /api/v1/auth/logout` | Ends the session (`204`) |
-| `POST /api/v1/auth/login` | Password login, during the move to Google: `{"username", "password"}` → `{"access_token", "token_type"}` |
 | `GET /api/v1/projects`, `GET /api/v1/projects/{slug}` | Published projects, in display order |
 | `GET /api/v1/lab-notes`, `GET /api/v1/lab-notes/{slug}`, `GET /api/v1/lab-notes/tags` | Published notes, and their tags with counts |
 | `GET /api/v1/categories` | Project categories |
 | `POST /api/v1/contact` | The contact form. The owner gets an email with the message; replying answers the visitor |
 | `POST /api/v1/ask` | A question about the owner's work, answered as a server-sent event stream (below). `503` when the model is offline or busy |
 | `POST /api/v1/csp-report` | Where browsers report Content-Security-Policy violations from the site (both the `report-uri` and Reporting API formats); each becomes a log line and a `csp_reports_total` count |
-| `/api/v1/admin/...` | Create, edit, reorder and delete content, list contact messages, upload images. Needs the session cookie (or, for now, `Authorization: Bearer <token>`) |
+| `/api/v1/admin/...` | Create, edit, reorder and delete content, list contact messages, upload images. Needs the session cookie; anything but a GET must also come from the site's own origin |
 | `GET /api/v1/admin/ask/questions` | Questions asked in the chat, newest first. Filters: `who` (`visitors`, the default, `admin` or `all`), `uncited`, `passage`, `failed` (cut off or broken off), `rating` (`good`, `bad` or `none`) |
 | `PATCH /api/v1/admin/ask/questions/{id}` | `{"rating": "good" \| "bad" \| null}` |
 | `POST /api/v1/admin/complete` | Note autocomplete: `{"prefix", "title", "noteId"}` → `{"id", "suggestion"}` (empty when the model is unsure or unavailable) |
@@ -309,7 +302,6 @@ Limits are counted per visitor: the `CF-Connecting-IP` address that Cloudflare s
 
 | Rule | Limit | Algorithm | If Redis is down |
 |------|-------|-----------|------------------|
-| Password login | 5 attempts per 15 minutes; a successful login clears the count | Sliding log | Refuse (`503`) |
 | Contact form | 3 messages per hour | Sliding log | Allow |
 | Chat questions | 10 per hour per visitor, and 500 a day for the whole site; not counted for the signed-in admin | Sliding log; token bucket | Allow |
 | Every other `/api/` request except `/api/v1/admin/*` and preflights | Bursts of 60, then 1 per second | Token bucket | Allow |
@@ -334,7 +326,6 @@ Uploaded JPEG, PNG and WebP images get WebP variants 640 and 1600 px wide (`<nam
 | `make run` | Local dev server with hot reload |
 | `make test` | Run the tests |
 | `make lint` / `make format` | Check / fix code style |
-| `make hash` | Generate the admin password hash (hidden input) |
 | `make deploy` / `make down` | Start / stop the local Docker Compose stack (not production) |
 | `make logs` / `make shell` / `make rebuild` | Docker logs, a shell in the container, rebuild the image |
 | `make revision` / `make upgrade` / `make downgrade` | Alembic migrations |

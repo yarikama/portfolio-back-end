@@ -13,17 +13,9 @@ VERSION = "0.1.0"
 DEBUG: bool = config("DEBUG", cast=bool, default=False)
 MAX_CONNECTIONS_COUNT: int = config("MAX_CONNECTIONS_COUNT", cast=int, default=10)
 MIN_CONNECTIONS_COUNT: int = config("MIN_CONNECTIONS_COUNT", cast=int, default=10)
-SECRET_KEY: Secret = config("SECRET_KEY", cast=Secret, default="")
 DATABASE_URL: str = config("DATABASE_URL", default="sqlite:///./app.db")
 
 PROJECT_NAME: str = config("PROJECT_NAME", default="Portfolio-Back-End")
-
-# Auth configuration
-ADMIN_USERNAME: str = config("ADMIN_USERNAME", default="admin")
-ADMIN_PASSWORD_HASH: str = config("ADMIN_PASSWORD_HASH", default="")
-ACCESS_TOKEN_EXPIRE_MINUTES: int = config(
-    "ACCESS_TOKEN_EXPIRE_MINUTES", cast=int, default=120
-)
 
 # Sign in with Google (api/routes/auth.py): an OAuth client of type "Web
 # application" whose authorized redirect URI is GOOGLE_REDIRECT_URI. Only

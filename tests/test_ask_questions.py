@@ -2,8 +2,8 @@ import os
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from api.dependencies.auth import get_current_admin
 from core import config
-from core.security import create_access_token
 from db.dependency import get_db
 from db.models.ask import AskQuestion
 from db.session import Base
@@ -60,8 +60,9 @@ def client(factory):
 
     app = get_application()
     app.dependency_overrides[get_db] = override_get_db
-    token = create_access_token({"sub": config.ADMIN_USERNAME}, str(config.SECRET_KEY))
-    return TestClient(app, headers={"Authorization": f"Bearer {token}"})
+    # Signed in (tests/test_google_login.py covers how).
+    app.dependency_overrides[get_current_admin] = lambda: "owner@example.com"
+    return TestClient(app)
 
 
 def questions(client, **params):
@@ -138,7 +139,7 @@ def test_the_admin_rates_an_answer(client):
 
 
 def test_only_the_admin_reads_them(client):
-    client.headers.pop("Authorization")
+    client.app.dependency_overrides.pop(get_current_admin)
     assert client.get("/api/v1/admin/ask/questions").status_code == 401
     missing = "/api/v1/admin/ask/questions/00000000-0000-0000-0000-000000000000"
     assert client.patch(missing, json={"rating": "good"}).status_code == 401
