@@ -1,3 +1,9 @@
+"""
+The contact form (POST /contact, public) and the owner's inbox of its
+messages (/admin/contact: list, mark read or replied, delete). Each new
+message is also emailed to the owner (services/notify.py).
+"""
+
 from uuid import UUID
 
 from api.dependencies import CurrentAdmin
@@ -42,7 +48,7 @@ async def create_contact(
     }
 
 
-@router.get("/contact", status_code=200)
+@router.get("/admin/contact", status_code=200)
 async def get_contacts(
     _admin: CurrentAdmin,
     db: Session = Depends(get_db),
@@ -66,7 +72,7 @@ async def get_contacts(
     }
 
 
-@router.patch("/contact/{id}")
+@router.patch("/admin/contact/{id}")
 async def update_contact(
     contact_update: ContactUpdate,
     _admin: CurrentAdmin,
@@ -85,7 +91,7 @@ async def update_contact(
     return {"data": ContactResponse.model_validate(db_contact)}
 
 
-@router.delete("/contact/{id}", status_code=204)
+@router.delete("/admin/contact/{id}", status_code=204)
 async def delete_contact(
     _admin: CurrentAdmin,
     db: Session = Depends(get_db),

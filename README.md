@@ -268,6 +268,7 @@ tests/                      pytest suite
 | `GET /api/v1/lab-notes`, `GET /api/v1/lab-notes/{slug}`, `GET /api/v1/lab-notes/tags` | Published notes, and their tags with counts |
 | `GET /api/v1/categories` | Project categories |
 | `POST /api/v1/contact` | The contact form. The owner gets an email with the message; replying answers the visitor |
+| `GET /api/v1/admin/contact?read=false` | Contact messages, newest first; `read` filters. `PATCH /api/v1/admin/contact/{id}` with `{"read"}` or `{"replied"}`, `DELETE` to remove one |
 | `POST /api/v1/ask` | A question about the owner's work, answered as a server-sent event stream (below). `503` when the model is offline or busy |
 | `POST /api/v1/csp-report` | Where browsers report Content-Security-Policy violations from the site (both the `report-uri` and Reporting API formats); each becomes a log line and a `csp_reports_total` count |
 | `/api/v1/admin/...` | Create, edit, reorder and delete content, list contact messages, upload images. Needs the session cookie; anything but a GET must also come from the site's own origin |
