@@ -38,6 +38,9 @@ SITE_URL: str = config("SITE_URL", default="https://yarikama.com")
 # at once.
 ADMIN_SESSION_HOURS: int = config("ADMIN_SESSION_HOURS", cast=int, default=12)
 
+# Whose public GitHub contribution graph the admin's welcome page shows.
+GITHUB_USER: str = config("GITHUB_USER", default="yarikama")
+
 # Pages allowed to call the API from a browser (CORS), and to send the admin
 # session cookie with requests that change something.
 CORS_ORIGINS: tuple[str, ...] = (
