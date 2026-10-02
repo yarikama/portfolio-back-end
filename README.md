@@ -274,6 +274,7 @@ tests/                      pytest suite
 | `/api/v1/admin/...` | Create, edit, reorder and delete content, list contact messages, upload images. Needs the session cookie; anything but a GET must also come from the site's own origin |
 | `GET /api/v1/admin/ask/questions` | Questions asked in the chat, newest first. Filters: `who` (`visitors`, the default, `admin` or `all`), `uncited`, `passage`, `failed` (cut off or broken off), `rating` (`good`, `bad` or `none`) |
 | `PATCH /api/v1/admin/ask/questions/{id}` | `{"rating": "good" \| "bad" \| null}` |
+| `GET /api/v1/admin/ask/questions/new`, `POST .../seen` | How many visitors asked since this admin last opened Questions (`{"count", "since"}`); opening it records the visit and returns the previous one (`{"previous"}`) |
 | `POST /api/v1/admin/complete` | Note autocomplete: `{"prefix", "title", "noteId"}` → `{"id", "suggestion"}` (empty when the model is unsure or unavailable) |
 | `POST /api/v1/admin/complete/{id}/feedback` | `{"outcome": "accepted" \| "rejected" \| "ignored", "acceptedChars"}`, recorded once per suggestion |
 
