@@ -17,9 +17,9 @@ import time
 from collections.abc import AsyncIterator
 from dataclasses import asdict
 
+from api.dependencies.auth import current_admin
 from api.dependencies.rate_limit import rate_limit
 from core import config
-from core.security import decode_access_token
 from db.dependency import get_db
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
@@ -72,18 +72,6 @@ def busy() -> HTTPException:
     return unavailable("Busy answering other questions. Try again shortly.", 10)
 
 
-def is_admin(request: Request) -> bool:
-    """
-    A valid admin token: the owner trying the chat is not limited. Any other
-    token, valid or not, is simply a visitor: the route is public.
-    """
-    scheme, _, token = request.headers.get("Authorization", "").partition(" ")
-    if scheme.lower() != "bearer" or not token:
-        return False
-    payload = decode_access_token(token, str(config.SECRET_KEY))
-    return payload is not None and payload.get("sub") == config.ADMIN_USERNAME
-
-
 @router.post("/ask")
 async def ask(body: AskRequest, request: Request, db: Session = Depends(get_db)):
     # The limits are counted here, not as route dependencies, so questions
@@ -92,7 +80,9 @@ async def ask(body: AskRequest, request: Request, db: Session = Depends(get_db))
     # retrying while the GPU is busy is not locked out for the hour. The
     # owner, logged in, is not counted at all; the GPU slots still apply.
     slots = generating()
-    admin = is_admin(request)
+    # The owner trying the chat is not limited. Any other credential, valid
+    # or not, is simply a visitor: the route is public.
+    admin = await current_admin(request) is not None
     if not config.ASK_URL:
         REQUESTS.labels("unavailable").inc()
         raise offline()
