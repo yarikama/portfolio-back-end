@@ -94,7 +94,10 @@ Planned, not promised; each item has a reason or a trigger.
 - **Metrics.** Prometheus metrics (answers, tokens, time to first token, prompt size, queue depth) are served on a separate port, so the public Ingress never exposes them.
 
 **Security.**
-- The admin password is stored as a bcrypt hash, and admin sessions use short-lived JWTs.
+- The admin password is stored as a bcrypt hash, and admin sessions use short-lived JWTs (PyJWT, HS256). A `SECRET_KEY` shorter than 32 characters, or unset, signs and accepts no token: login answers 503 instead of signing with a key anyone could use.
+- Request bodies are capped before anything reads them: 20 MB for image uploads, 2 MB for everything else (413 above that).
+- An upload is stored as what its bytes are (JPEG, PNG, GIF or WebP, checked with Pillow), never as the file name or type the browser claims, and only in the known folders (`images`, `notes`, `covers`).
+- CI runs `pip-audit` against the locked dependencies.
 - Drafts are filtered out of every public endpoint and of the chat prompt, and tests check this.
 - Every response carries HSTS, `nosniff`, `X-Frame-Options: DENY` and `Referrer-Policy: no-referrer`; API responses also get `Content-Security-Policy: default-src 'none'`, since they never load anything.
 - The production image runs as an unprivileged user.
@@ -227,7 +230,7 @@ tests/                      pytest suite
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `DATABASE_URL` | PostgreSQL connection string. In production it comes from CloudNativePG, not from `.env.prod` | `sqlite:///./app.db` |
-| `SECRET_KEY` | JWT signing key; changing it logs everyone out | empty (set it) |
+| `SECRET_KEY` | JWT signing key, at least 32 characters (shorter or unset, admin login is refused); changing it logs everyone out | empty (set it) |
 | `ADMIN_USERNAME` | Admin login username | `admin` |
 | `ADMIN_PASSWORD_HASH` | bcrypt hash of the admin password (`make hash`) | empty (set it) |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | Token lifetime | `120` |

@@ -6,7 +6,14 @@ import aioboto3
 from aiobotocore.config import AioConfig
 from core import config
 from fastapi import HTTPException, UploadFile
-from services.images import WIDTHS, is_original, variant_key
+from services.images import (
+    MAX_UPLOAD_BYTES,
+    WIDTHS,
+    NotAnImageError,
+    identify_upload,
+    is_original,
+    variant_key,
+)
 
 # botocore waits 60 s to connect by default: far too long for a request.
 TIMEOUTS = AioConfig(connect_timeout=5, read_timeout=30, retries={"max_attempts": 3})
@@ -14,6 +21,9 @@ TIMEOUTS = AioConfig(connect_timeout=5, read_timeout=30, retries={"max_attempts"
 # Keys are unique per upload and never rewritten, so browsers and Cloudflare
 # may keep variants for good.
 IMMUTABLE = "public, max-age=31536000, immutable"
+
+# The admin's upload folders: note images, project covers, and the default.
+UPLOAD_FOLDERS = frozenset({"images", "notes", "covers"})
 
 
 class R2StorageService:
@@ -39,26 +49,31 @@ class R2StorageService:
         return url.removeprefix(f"{self.public_url}/")
 
     async def upload_image(self, file: UploadFile, folder: str = "images") -> str:
-        """Upload an image to R2 and return the public URL."""
-        allowed_types = ["image/jpeg", "image/png", "image/gif", "image/webp"]
-        if file.content_type not in allowed_types:
-            raise HTTPException(400, f"Unsupported file type: {file.content_type}")
+        """
+        Upload an image to R2 and return its public URL. The bytes decide
+        what it is (services/images.identify_upload); the file name and the
+        type the browser sent are ignored.
+        """
+        if folder not in UPLOAD_FOLDERS:
+            raise HTTPException(400, f"Unknown folder: {folder[:40]}")
+        data = await file.read(MAX_UPLOAD_BYTES + 1)
+        if len(data) > MAX_UPLOAD_BYTES:
+            raise HTTPException(413, "Image too large (over 20 MB).")
+        try:
+            ext, content_type = identify_upload(data)
+        except NotAnImageError as error:
+            raise HTTPException(400, "Not a JPEG, PNG, GIF or WebP image.") from error
 
-        # Generate unique filename
-        if file.filename and "." in file.filename:
-            ext = file.filename.split(".")[-1]
-        else:
-            ext = "jpg"
         timestamp = datetime.now().strftime("%Y%m%d")
         unique_id = uuid.uuid4().hex[:8]
         key = f"{folder}/{timestamp}/{unique_id}.{ext}"
 
         async with self._client() as s3:
-            await s3.upload_fileobj(
-                file.file,
-                self.bucket_name,
-                key,
-                ExtraArgs={"ContentType": file.content_type},
+            await s3.put_object(
+                Bucket=self.bucket_name,
+                Key=key,
+                Body=data,
+                ContentType=content_type,
             )
 
         return f"{self.public_url}/{key}"
