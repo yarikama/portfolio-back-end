@@ -6,6 +6,7 @@ from api.routes import (
     categories,
     contact,
     csp,
+    github,
     lab_notes,
     projects,
     upload,
@@ -23,3 +24,4 @@ router.include_router(upload.router, tags=["upload"], prefix="/v1")
 router.include_router(autocomplete.router, tags=["autocomplete"], prefix="/v1")
 router.include_router(ask.router, tags=["ask"], prefix="/v1")
 router.include_router(ask_questions.router, tags=["ask"], prefix="/v1")
+router.include_router(github.router, tags=["admin"], prefix="/v1")
