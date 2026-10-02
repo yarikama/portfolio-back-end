@@ -23,6 +23,38 @@ VARIANT = re.compile(r"\.w\d+\.webp$")
 Image.MAX_IMAGE_PIXELS = 40_000_000
 
 
+# The largest image the admin may upload; api/body_limit.py refuses larger
+# request bodies before they are read.
+MAX_UPLOAD_BYTES = 20 * 1024 * 1024
+
+# What an upload may be, by what Pillow finds in the bytes, never by the
+# file name or the type the browser claims: the stored extension and
+# Content-Type come from here.
+UPLOAD_FORMATS = {
+    "JPEG": ("jpg", "image/jpeg"),
+    "PNG": ("png", "image/png"),
+    "GIF": ("gif", "image/gif"),
+    "WEBP": ("webp", "image/webp"),
+}
+
+
+class NotAnImageError(ValueError):
+    """The bytes are not a JPEG, PNG, GIF or WebP image Pillow can read."""
+
+
+def identify_upload(data: bytes) -> tuple[str, str]:
+    """The extension and Content-Type to store an upload under."""
+    try:
+        with Image.open(io.BytesIO(data)) as opened:
+            image_format = opened.format
+            opened.verify()  # reads the file through; catches truncation
+    except (Image.DecompressionBombError, OSError, SyntaxError, ValueError) as err:
+        raise NotAnImageError(str(err)) from err
+    if image_format not in UPLOAD_FORMATS:
+        raise NotAnImageError(f"unsupported format {image_format}")
+    return UPLOAD_FORMATS[image_format]
+
+
 def is_original(key: str) -> bool:
     return bool(PROCESSABLE.search(key)) and not VARIANT.search(key)
 

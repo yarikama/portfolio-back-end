@@ -2,8 +2,9 @@ from datetime import timedelta
 
 from api.dependencies.rate_limit import Limited, rate_limit
 from core import config
-from core.security import create_access_token, verify_password
+from core.security import create_access_token, secret_is_usable, verify_password
 from fastapi import APIRouter, Depends, HTTPException, status
+from loguru import logger
 from schemas.auth import LoginRequest, TokenResponse
 from services.rate_limit import LOGIN
 
@@ -15,6 +16,18 @@ async def login(
     request: LoginRequest,
     limited: Limited = Depends(rate_limit(LOGIN, "login attempts")),
 ) -> TokenResponse:
+    # Misconfigured, fail closed: no key to sign with safely, or no password
+    # to check against (bcrypt would raise on an empty hash).
+    if not secret_is_usable(str(config.SECRET_KEY)) or not config.ADMIN_PASSWORD_HASH:
+        logger.error(
+            "Admin login refused: SECRET_KEY is unset or too short, or "
+            "ADMIN_PASSWORD_HASH is unset"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Admin login is not configured.",
+        )
+
     if request.username != config.ADMIN_USERNAME:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

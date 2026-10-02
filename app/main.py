@@ -1,3 +1,4 @@
+from api.body_limit import BodyLimitMiddleware
 from api.cache import PublicCacheMiddleware
 from api.middleware import PublicRateLimitMiddleware
 from api.routes.api import router as api_router
@@ -28,6 +29,9 @@ def get_application() -> FastAPI:
 
     # Before CORS, so that CORS wraps it and its 429s carry CORS headers.
     application.add_middleware(PublicRateLimitMiddleware)
+    # Outside the rate limit, so an oversized body is refused before anything
+    # reads it; inside CORS, so the browser can read the 413.
+    application.add_middleware(BodyLimitMiddleware)
     application.add_middleware(
         CORSMiddleware,
         allow_origins=origins,

@@ -201,7 +201,7 @@ async def client(app):
 def admin_password(monkeypatch):
     monkeypatch.setattr(config, "ADMIN_USERNAME", "owner")
     monkeypatch.setattr(config, "ADMIN_PASSWORD_HASH", get_password_hash("right"))
-    monkeypatch.setattr(config, "SECRET_KEY", "test-secret")
+    monkeypatch.setattr(config, "SECRET_KEY", "test-secret-long-enough-to-sign-tokens")
     return "right"
 
 
