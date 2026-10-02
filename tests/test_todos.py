@@ -157,3 +157,22 @@ def test_only_the_admin_has_them(client):
         client.get("/api/v1/admin/todos", params={"day": "2001-01-01"}).status_code
         == 401
     )
+
+
+def test_past_items_are_offered_once_most_recent_first(client):
+    add(client, "Review the CSP reports", MON)
+    add(client, "Email the Rice career office", MON)
+    add(client, "Review the CSP reports", TUE)
+    removed = add(client, "A typo", TUE)
+    client.delete(f"/api/v1/admin/todos/{removed['id']}")
+    today(client, TUE)  # adds the daily NeetCode
+
+    history = client.get("/api/v1/admin/todos/history").json()["data"]
+    mine = [
+        text
+        for text in history
+        if text in {"Review the CSP reports", "Email the Rice career office", "A typo"}
+    ]
+
+    assert mine == ["Review the CSP reports", "Email the Rice career office"]
+    assert "Solve a problem on NeetCode" not in history

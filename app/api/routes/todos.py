@@ -34,6 +34,16 @@ async def list_todos(
     return {"data": [dump(row) for row in todos.for_day(db, day)]}
 
 
+@router.get("/admin/todos/history")
+async def todo_history(
+    _admin: CurrentAdmin,
+    limit: int = Query(200, ge=1, le=500),
+    db: Session = Depends(get_db),
+):
+    """Past to-dos' text, most recent first, to complete new ones from."""
+    return {"data": todos.history(db, limit)}
+
+
 @router.post("/admin/todos", status_code=status.HTTP_201_CREATED)
 async def add_todo(
     body: TodoCreate, _admin: CurrentAdmin, db: Session = Depends(get_db)
