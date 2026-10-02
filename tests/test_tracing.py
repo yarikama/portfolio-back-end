@@ -1,3 +1,8 @@
+import os
+import subprocess
+import sys
+from pathlib import Path
+
 import pytest
 from core.logging import add_trace_id
 from core.tracing import instrument, setup_tracing
@@ -77,3 +82,42 @@ def test_tracing_is_off_without_an_endpoint(monkeypatch):
     monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
 
     assert setup_tracing(FastAPI(), engine=None) is False
+
+
+def test_only_our_exporter_sends_telemetry():
+    """
+    With OTEL_EXPORTER_OTLP_ENDPOINT set, FastAPI would add exporters of its
+    own: a second one for traces, and metrics and logs, which Tempo does not
+    take. In a fresh process, as the provider globals can be set only once.
+    """
+    script = """
+from main import app
+from fastapi.testclient import TestClient
+from opentelemetry import metrics, trace
+from opentelemetry._logs import get_logger_provider
+
+with TestClient(app):
+    pass
+processors = trace.get_tracer_provider()._active_span_processor._span_processors
+print(len(processors), type(metrics.get_meter_provider()).__name__,
+      type(get_logger_provider()).__name__)
+"""
+    env = {
+        **os.environ,
+        # Nothing listens there; nothing is sent before the process ends.
+        "OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:9",
+        "OTEL_BSP_SCHEDULE_DELAY": "600000",
+    }
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=Path(__file__).parent.parent / "app",
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert result.returncode == 0, result.stderr
+    processors, meter_provider, logger_provider = result.stdout.split()
+    assert processors == "1"
+    assert meter_provider.startswith("_Proxy")
+    assert logger_provider.startswith("Proxy")
