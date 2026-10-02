@@ -4,6 +4,13 @@ import pytest
 from fakeredis import FakeAsyncRedis
 from redis.asyncio import Redis
 
+# A signing key for the tests, set before any test module imports the app's
+# configuration: the app refuses to sign or accept tokens with a missing or
+# short one.
+os.environ.setdefault(
+    "SECRET_KEY", "test-secret-key-for-the-test-suite-only-0123456789"
+)
+
 
 @pytest.fixture
 def anyio_backend():

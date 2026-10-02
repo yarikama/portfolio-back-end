@@ -14,6 +14,18 @@ jobs:
           uv run ruff check .
           uv run ruff format --check .
 
+  # Known vulnerabilities in the locked dependencies. Not a prerequisite of
+  # the image: a new advisory shows up here without blocking deploys.
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - name: pip-audit
+        run: |
+          uv export --locked --no-emit-project --no-hashes -o requirements.txt
+          uvx pip-audit -r requirements.txt --disable-pip --no-deps
+
   test:
     runs-on: ubuntu-latest
     strategy:

@@ -1,9 +1,21 @@
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
-from jose import JWTError, jwt
+import jwt
 
 ALGORITHM = "HS256"
+# HS256 wants a key at least as long as its hash output (RFC 7518, 3.2).
+# Shorter, or empty because SECRET_KEY was left unset, anyone could forge an
+# admin token: such a key signs and accepts nothing.
+MIN_SECRET_LENGTH = 32
+
+
+class InsecureSecretError(RuntimeError):
+    """SECRET_KEY is unset or too short to sign tokens with."""
+
+
+def secret_is_usable(secret: str) -> bool:
+    return len(secret) >= MIN_SECRET_LENGTH
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -28,8 +40,11 @@ def create_access_token(
     """
     Create an access token.
 
-    Uses the jose library to create the access token.
     """
+    if not secret_is_usable(secret_key):
+        raise InsecureSecretError(
+            f"SECRET_KEY must be at least {MIN_SECRET_LENGTH} characters"
+        )
     to_encode = data.copy()
 
     if expires_delta:
@@ -45,10 +60,11 @@ def decode_access_token(token: str, secret_key: str) -> dict | None:
     """
     Decode an access token.
 
-    Uses the jose library to decode the access token.
     """
+    if not secret_is_usable(secret_key):
+        return None
     try:
         payload = jwt.decode(token, secret_key, algorithms=[ALGORITHM])
         return payload
-    except JWTError:
+    except jwt.PyJWTError:
         return None

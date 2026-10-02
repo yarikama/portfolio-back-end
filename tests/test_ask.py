@@ -706,7 +706,7 @@ async def test_the_admin_is_not_limited(model, limited_client, redis):
     "headers",
     [
         admin_headers("203.0.113.10", username="someone-else"),
-        admin_headers("203.0.113.10", secret="not-the-secret"),
+        admin_headers("203.0.113.10", secret="a-different-key-" + "x" * 32),
         {"CF-Connecting-IP": "203.0.113.10", "Authorization": "Bearer nonsense"},
     ],
     ids=["other user", "wrong signature", "not a token"],

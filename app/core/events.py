@@ -1,7 +1,8 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from core.config import METRICS_PORT, REDIS_URL
+from core.config import METRICS_PORT, REDIS_URL, SECRET_KEY
+from core.security import MIN_SECRET_LENGTH, secret_is_usable
 from fastapi import FastAPI
 from loguru import logger
 from prometheus_client import start_http_server
@@ -25,6 +26,12 @@ def connect_redis(url: str, socket_timeout: float = 0.25) -> Redis:
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     if METRICS_PORT:
         start_http_server(METRICS_PORT)
+    if not secret_is_usable(str(SECRET_KEY)):
+        # The API still serves the site; only the admin is shut.
+        logger.error(
+            f"SECRET_KEY is unset or shorter than {MIN_SECRET_LENGTH} characters: "
+            "admin login and admin tokens are refused"
+        )
 
     redis = None
     if str(REDIS_URL):
