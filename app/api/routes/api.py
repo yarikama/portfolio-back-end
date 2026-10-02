@@ -9,6 +9,7 @@ from api.routes import (
     github,
     lab_notes,
     projects,
+    todos,
     upload,
 )
 from fastapi import APIRouter
@@ -24,4 +25,5 @@ router.include_router(upload.router, tags=["upload"], prefix="/v1")
 router.include_router(autocomplete.router, tags=["autocomplete"], prefix="/v1")
 router.include_router(ask.router, tags=["ask"], prefix="/v1")
 router.include_router(ask_questions.router, tags=["ask"], prefix="/v1")
+router.include_router(todos.router, tags=["admin"], prefix="/v1")
 router.include_router(github.router, tags=["admin"], prefix="/v1")

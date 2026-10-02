@@ -28,6 +28,7 @@ from db.models.category import Category
 from db.models.autocomplete import AutocompleteSuggestion
 from db.models.ask import AskQuestion
 from db.models.admin_seen import AdminSeen
+from db.models.todo import AdminTodo
 
 target_metadata = Base.metadata
 
