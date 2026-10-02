@@ -128,3 +128,38 @@ def test_only_the_admin_reads_them(client, factory):
 
 def test_the_old_public_path_no_longer_lists_them(client):
     assert client.get("/api/v1/contact").status_code == 405
+
+
+# The form
+
+
+def send(client, **fields):
+    return client.post(
+        "/api/v1/contact",
+        json={
+            "name": "V",
+            "email": "visitor@example.com",
+            "subject": PREFIX + "Hi",
+            "message": "Yo",
+            **fields,
+        },
+    )
+
+
+def test_short_and_long_messages_are_both_taken(client):
+    short = send(client)
+    long = send(
+        client,
+        name="N" * 500,
+        subject=PREFIX + "S" * 1000,
+        message="M" * 50_000,
+    )
+
+    assert (short.status_code, long.status_code) == (201, 201)
+    stored = client.get("/api/v1/admin/contact", params={"limit": 100}).json()["data"]
+    assert any(len(m["message"]) == 50_000 and len(m["name"]) == 500 for m in stored)
+
+
+@pytest.mark.parametrize("field", ["name", "subject", "message"])
+def test_a_blank_field_is_refused(client, field):
+    assert send(client, **{field: "   "}).status_code == 422
