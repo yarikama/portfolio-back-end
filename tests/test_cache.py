@@ -90,5 +90,10 @@ def test_if_none_match_parsing():
 def test_the_app_puts_the_cache_outside_cors():
     names = [m.cls.__name__ for m in get_application().user_middleware]
 
-    # user_middleware lists the outermost first.
-    assert names[:2] == ["PublicCacheMiddleware", "CORSMiddleware"]
+    # user_middleware lists the outermost first. The security headers go on
+    # everything, cached copies included.
+    assert names[:3] == [
+        "SecurityHeadersMiddleware",
+        "PublicCacheMiddleware",
+        "CORSMiddleware",
+    ]

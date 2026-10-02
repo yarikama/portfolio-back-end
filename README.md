@@ -96,6 +96,7 @@ Planned, not promised; each item has a reason or a trigger.
 **Security.**
 - The admin password is stored as a bcrypt hash, and admin sessions use short-lived JWTs.
 - Drafts are filtered out of every public endpoint and of the chat prompt, and tests check this.
+- Every response carries HSTS, `nosniff`, `X-Frame-Options: DENY` and `Referrer-Policy: no-referrer`; API responses also get `Content-Security-Policy: default-src 'none'`, since they never load anything.
 - The production image runs as an unprivileged user.
 - The deploy key that can change the cluster is only available to workflows on `main`.
 
@@ -260,6 +261,7 @@ tests/                      pytest suite
 | `GET /api/v1/categories` | Project categories |
 | `POST /api/v1/contact` | The contact form. The owner gets an email with the message; replying answers the visitor |
 | `POST /api/v1/ask` | A question about the owner's work, answered as a server-sent event stream (below). `503` when the model is offline or busy |
+| `POST /api/v1/csp-report` | Where browsers report Content-Security-Policy violations from the site (both the `report-uri` and Reporting API formats); each becomes a log line and a `csp_reports_total` count |
 | `/api/v1/admin/...` | Create, edit, reorder and delete content, list contact messages, upload images. Needs `Authorization: Bearer <token>` |
 | `GET /api/v1/admin/ask/questions` | Questions asked in the chat, newest first. Filters: `who` (`visitors`, the default, `admin` or `all`), `uncited`, `passage`, `failed` (cut off or broken off), `rating` (`good`, `bad` or `none`) |
 | `PATCH /api/v1/admin/ask/questions/{id}` | `{"rating": "good" \| "bad" \| null}` |
