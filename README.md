@@ -12,7 +12,7 @@ It is built with FastAPI and PostgreSQL. It runs on a single-node k3s cluster on
 - **Ask about my work**: `POST /api/v1/ask` streams an answer from Qwen3.5-4B over server-sent events, with checked citations to the projects, notes and resume it used.
 - **Note autocomplete**: suggestions from Qwen3.5-0.8B-Base while the author writes. Every suggestion and what became of it is stored as training data.
 - **Images**: uploads go to Cloudflare R2. A background worker makes WebP variants of each image.
-- **Protection**: rate limits in Redis, a cap on concurrent answers, a daily limit on questions for the whole site, and an admin area behind JWT login.
+- **Protection**: rate limits in Redis, a cap on concurrent answers, a daily limit on questions for the whole site, and an admin area behind Sign in with Google.
 
 ## Architecture
 
@@ -94,7 +94,9 @@ Planned, not promised; each item has a reason or a trigger.
 - **Metrics.** Prometheus metrics (answers, tokens, time to first token, prompt size, queue depth) are served on a separate port, so the public Ingress never exposes them.
 
 **Security.**
-- The admin password is stored as a bcrypt hash, and admin sessions use short-lived JWTs (PyJWT, HS256). A `SECRET_KEY` shorter than 32 characters, or unset, signs and accepts no token: login answers 503 instead of signing with a key anyone could use.
+- The admin signs in with Google: the API runs the OAuth authorization code flow with PKCE, a one-time state bound to the browser by a cookie, and a nonce, and lets in only the accounts in `ADMIN_EMAILS` ([`services/google_oauth.py`](app/services/google_oauth.py)). The site loads no script from Google.
+- The session is an `HttpOnly`, `Secure`, `SameSite=Strict` `__Host-` cookie, so page scripts cannot read it. Redis keeps only its SHA-256, and signing out deletes it at once. A request that changes something must also come from the site's own origin.
+- Password login with a bcrypt hash and short-lived JWTs (PyJWT, HS256) remains during the move to Google sign-in. A `SECRET_KEY` shorter than 32 characters, or unset, signs and accepts no token: login answers 503 instead of signing with a key anyone could use.
 - Request bodies are capped before anything reads them: 20 MB for image uploads, 2 MB for everything else (413 above that).
 - An upload is stored as what its bytes are (JPEG, PNG, GIF or WebP, checked with Pillow), never as the file name or type the browser claims, and only in the known folders (`images`, `notes`, `covers`).
 - CI runs `pip-audit` against the locked dependencies.
@@ -211,6 +213,8 @@ app/
 │   ├── ask_history.py      A conversation's last two turns, in Redis
 │   ├── autocomplete.py     Prompting, confidence cut-off, repetition trimming
 │   ├── rate_limit.py       Lua-scripted sliding logs and token buckets
+│   ├── google_oauth.py     Sign in with Google (authorization code flow, PKCE)
+│   ├── admin_session.py    Admin sessions in Redis
 │   ├── jobs.py             At-least-once queue on Redis Streams
 │   ├── image_jobs.py       Image jobs and reconciliation with R2
 │   ├── images.py           WebP variants with Pillow
@@ -234,6 +238,11 @@ tests/                      pytest suite
 | `ADMIN_USERNAME` | Admin login username | `admin` |
 | `ADMIN_PASSWORD_HASH` | bcrypt hash of the admin password (`make hash`) | empty (set it) |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | Token lifetime | `120` |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | OAuth client (type "Web application") for Sign in with Google; empty turns it off | empty |
+| `GOOGLE_REDIRECT_URI` | The callback registered with that client | `https://api.yarikama.com/api/v1/auth/google/callback` |
+| `ADMIN_EMAILS` | Comma-separated Google accounts that may sign in | empty |
+| `SITE_URL` | Where the browser goes after signing in | `https://yarikama.com` |
+| `ADMIN_SESSION_HOURS` | How long a Google sign-in lasts | `12` |
 | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`, `R2_PUBLIC_URL` | Cloudflare R2, for image uploads | bucket `yarikama-portfolio-backend` |
 | `DEBUG` | Debug mode | `False` |
 | `REDIS_URL` | Redis for rate limits and the job queue, e.g. `redis://:password@host:6379/0`; empty turns rate limiting off | empty |
@@ -258,14 +267,17 @@ tests/                      pytest suite
 |----------|-------------|
 | `GET /health` | Liveness, for Kubernetes probes and uptime monitoring: `{"status": "ok"}` |
 | `GET /docs`, `GET /redoc` | Interactive API docs |
-| `POST /api/v1/auth/login` | `{"username", "password"}` → `{"access_token", "token_type"}` |
+| `GET /api/v1/auth/google/login?next=/admin/...` | Starts Sign in with Google; Google then sends the browser to `/api/v1/auth/google/callback`, which sets the session cookie and returns to `next` |
+| `GET /api/v1/auth/me` | `{"email"}` of whoever is signed in; `401` if no one |
+| `POST /api/v1/auth/logout` | Ends the session (`204`) |
+| `POST /api/v1/auth/login` | Password login, during the move to Google: `{"username", "password"}` → `{"access_token", "token_type"}` |
 | `GET /api/v1/projects`, `GET /api/v1/projects/{slug}` | Published projects, in display order |
 | `GET /api/v1/lab-notes`, `GET /api/v1/lab-notes/{slug}`, `GET /api/v1/lab-notes/tags` | Published notes, and their tags with counts |
 | `GET /api/v1/categories` | Project categories |
 | `POST /api/v1/contact` | The contact form. The owner gets an email with the message; replying answers the visitor |
 | `POST /api/v1/ask` | A question about the owner's work, answered as a server-sent event stream (below). `503` when the model is offline or busy |
 | `POST /api/v1/csp-report` | Where browsers report Content-Security-Policy violations from the site (both the `report-uri` and Reporting API formats); each becomes a log line and a `csp_reports_total` count |
-| `/api/v1/admin/...` | Create, edit, reorder and delete content, list contact messages, upload images. Needs `Authorization: Bearer <token>` |
+| `/api/v1/admin/...` | Create, edit, reorder and delete content, list contact messages, upload images. Needs the session cookie (or, for now, `Authorization: Bearer <token>`) |
 | `GET /api/v1/admin/ask/questions` | Questions asked in the chat, newest first. Filters: `who` (`visitors`, the default, `admin` or `all`), `uncited`, `passage`, `failed` (cut off or broken off), `rating` (`good`, `bad` or `none`) |
 | `PATCH /api/v1/admin/ask/questions/{id}` | `{"rating": "good" \| "bad" \| null}` |
 | `POST /api/v1/admin/complete` | Note autocomplete: `{"prefix", "title", "noteId"}` → `{"id", "suggestion"}` (empty when the model is unsure or unavailable) |
@@ -297,9 +309,9 @@ Limits are counted per visitor: the `CF-Connecting-IP` address that Cloudflare s
 
 | Rule | Limit | Algorithm | If Redis is down |
 |------|-------|-----------|------------------|
-| Login | 5 attempts per 15 minutes; a successful login clears the count | Sliding log | Refuse (`503`) |
+| Password login | 5 attempts per 15 minutes; a successful login clears the count | Sliding log | Refuse (`503`) |
 | Contact form | 3 messages per hour | Sliding log | Allow |
-| Chat questions | 10 per hour per visitor, and 500 a day for the whole site; not counted with a valid admin token | Sliding log; token bucket | Allow |
+| Chat questions | 10 per hour per visitor, and 500 a day for the whole site; not counted for the signed-in admin | Sliding log; token bucket | Allow |
 | Every other `/api/` request except `/api/v1/admin/*` and preflights | Bursts of 60, then 1 per second | Token bucket | Allow |
 
 Design and trade-offs: homelab `docs/11-rate-limiting.md`.

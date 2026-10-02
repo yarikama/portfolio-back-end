@@ -4,7 +4,7 @@ import sys
 from core.logging import FORMAT, InterceptHandler, add_trace_id
 from loguru import logger
 from starlette.config import Config
-from starlette.datastructures import Secret
+from starlette.datastructures import CommaSeparatedStrings, Secret
 
 config = Config(".env")
 
@@ -23,6 +23,38 @@ ADMIN_USERNAME: str = config("ADMIN_USERNAME", default="admin")
 ADMIN_PASSWORD_HASH: str = config("ADMIN_PASSWORD_HASH", default="")
 ACCESS_TOKEN_EXPIRE_MINUTES: int = config(
     "ACCESS_TOKEN_EXPIRE_MINUTES", cast=int, default=120
+)
+
+# Sign in with Google (api/routes/auth.py): an OAuth client of type "Web
+# application" whose authorized redirect URI is GOOGLE_REDIRECT_URI. Only
+# the Google accounts in ADMIN_EMAILS get in. Any of the three empty turns
+# Google sign-in off.
+GOOGLE_CLIENT_ID: str = config("GOOGLE_CLIENT_ID", default="")
+GOOGLE_CLIENT_SECRET: Secret = config("GOOGLE_CLIENT_SECRET", cast=Secret, default="")
+GOOGLE_REDIRECT_URI: str = config(
+    "GOOGLE_REDIRECT_URI",
+    default="https://api.yarikama.com/api/v1/auth/google/callback",
+)
+ADMIN_EMAILS: frozenset[str] = frozenset(
+    email.strip().lower()
+    for email in config("ADMIN_EMAILS", cast=CommaSeparatedStrings, default="")
+    if email.strip()
+)
+# Where the browser goes after signing in (its /admin pages).
+SITE_URL: str = config("SITE_URL", default="https://yarikama.com")
+# How long a sign-in lasts. Sessions live in Redis, so signing out ends one
+# at once.
+ADMIN_SESSION_HOURS: int = config("ADMIN_SESSION_HOURS", cast=int, default=12)
+
+# Pages allowed to call the API from a browser (CORS), and to send the admin
+# session cookie with requests that change something.
+CORS_ORIGINS: tuple[str, ...] = (
+    "http://localhost:3000",  # Local frontend dev
+    "http://localhost:5173",  # Vite dev server
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:5173",
+    "https://yarikama.com",  # Production frontend
+    "https://www.yarikama.com",
 )
 
 # Rate limits (services.rate_limit) are kept in Redis, e.g.

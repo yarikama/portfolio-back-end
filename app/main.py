@@ -4,7 +4,7 @@ from api.middleware import PublicRateLimitMiddleware
 from api.routes.api import router as api_router
 from api.routes.health import router as health_router
 from api.security import SecurityHeadersMiddleware
-from core.config import API_PREFIX, DEBUG, PROJECT_NAME, VERSION
+from core.config import API_PREFIX, CORS_ORIGINS, DEBUG, PROJECT_NAME, VERSION
 from core.events import lifespan
 from core.tracing import setup_tracing
 from db.session import engine
@@ -17,16 +17,6 @@ def get_application() -> FastAPI:
         title=PROJECT_NAME, debug=DEBUG, version=VERSION, lifespan=lifespan
     )
 
-    # CORS settings
-    origins = [
-        "http://localhost:3000",  # Local frontend dev
-        "http://localhost:5173",  # Vite dev server
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:5173",
-        "https://yarikama.com",  # Production frontend
-        "https://www.yarikama.com",
-    ]
-
     # Before CORS, so that CORS wraps it and its 429s carry CORS headers.
     application.add_middleware(PublicRateLimitMiddleware)
     # Outside the rate limit, so an oversized body is refused before anything
@@ -34,13 +24,13 @@ def get_application() -> FastAPI:
     application.add_middleware(BodyLimitMiddleware)
     application.add_middleware(
         CORSMiddleware,
-        allow_origins=origins,
+        allow_origins=list(CORS_ORIGINS),
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
-        # Admin requests carry an Authorization header, so the browser asks
-        # permission (a preflight OPTIONS round trip) before them. Starlette's
-        # default lets it remember the answer for 10 minutes; 2 hours is
+        # Admin requests send JSON with the session cookie, so the browser
+        # asks permission (a preflight OPTIONS round trip) before them.
+        # Starlette's default lets it remember the answer for 10 minutes; 2 hours is
         # Chrome's cap, and saves a round trip on the first autocomplete
         # request after every pause in writing.
         max_age=7200,

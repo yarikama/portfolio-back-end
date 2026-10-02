@@ -19,3 +19,9 @@ class TokenResponse(BaseModel):
 
     access_token: str
     token_type: str = "bearer"
+
+
+class AdminResponse(BaseModel):
+    """Who is signed in to the admin area."""
+
+    email: str
