@@ -7,6 +7,7 @@ from api.routes import (
     contact,
     csp,
     github,
+    goal,
     lab_notes,
     projects,
     todos,
@@ -27,3 +28,4 @@ router.include_router(ask.router, tags=["ask"], prefix="/v1")
 router.include_router(ask_questions.router, tags=["ask"], prefix="/v1")
 router.include_router(todos.router, tags=["admin"], prefix="/v1")
 router.include_router(github.router, tags=["admin"], prefix="/v1")
+router.include_router(goal.router, tags=["admin"], prefix="/v1")

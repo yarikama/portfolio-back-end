@@ -29,6 +29,7 @@ from db.models.autocomplete import AutocompleteSuggestion
 from db.models.ask import AskQuestion
 from db.models.admin_seen import AdminSeen
 from db.models.todo import AdminTodo
+from db.models.admin_setting import AdminSetting
 
 target_metadata = Base.metadata
 
