@@ -276,6 +276,7 @@ tests/                      pytest suite
 | `PATCH /api/v1/admin/ask/questions/{id}` | `{"rating": "good" \| "bad" \| null}` |
 | `GET /api/v1/admin/github/contributions` | The owner's public GitHub contribution graph (`GITHUB_USER`), for the welcome page: `{"user", "total", "days": [{"date", "count", "level"}]}`, fetched at most once an hour |
 | `GET /api/v1/admin/todos?day=YYYY-MM-DD`, `POST`, `PATCH /{id}`, `DELETE /{id}` | The welcome page's to-dos: each day starts with the daily items (a NeetCode problem), anything not done carries over, and what was done shows for that day |
+| `GET`, `PUT /api/v1/admin/goal` | The owner's current goal, a few words shown large on the welcome page: `{"text"}`; empty clears it |
 | `GET /api/v1/admin/ask/questions/new`, `POST .../seen` | How many visitors asked since this admin last opened Questions (`{"count", "since"}`); opening it records the visit and returns the previous one (`{"previous"}`) |
 | `POST /api/v1/admin/complete` | Note autocomplete: `{"prefix", "title", "noteId"}` → `{"id", "suggestion"}` (empty when the model is unsure or unavailable) |
 | `POST /api/v1/admin/complete/{id}/feedback` | `{"outcome": "accepted" \| "rejected" \| "ignored", "acceptedChars"}`, recorded once per suggestion |
