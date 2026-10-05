@@ -1,6 +1,6 @@
 import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 
 import aioboto3
 from aiobotocore.config import AioConfig
@@ -64,7 +64,8 @@ class R2StorageService:
         except NotAnImageError as error:
             raise HTTPException(400, "Not a JPEG, PNG, GIF or WebP image.") from error
 
-        timestamp = datetime.now().strftime("%Y%m%d")
+        # The UTC date, so a key does not depend on the machine's time zone.
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d")
         unique_id = uuid.uuid4().hex[:8]
         key = f"{folder}/{timestamp}/{unique_id}.{ext}"
 
