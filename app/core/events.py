@@ -1,4 +1,4 @@
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from core.config import METRICS_PORT, REDIS_URL
@@ -22,7 +22,7 @@ def connect_redis(url: str, socket_timeout: float = 0.25) -> Redis:
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     if METRICS_PORT:
         start_http_server(METRICS_PORT)
     redis = None

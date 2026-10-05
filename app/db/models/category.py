@@ -1,12 +1,16 @@
 """Category model for project categorization."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import uuid4
 
 from db.session import Base
 from sqlalchemy import Column, DateTime, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
+
+
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 class Category(Base):
@@ -25,13 +29,11 @@ class Category(Base):
     description = Column(Text, nullable=True)
     order = Column(Integer, default=0, nullable=False)
 
-    created_at = Column(
-        DateTime(timezone=True), default=datetime.utcnow, nullable=False
-    )
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
     updated_at = Column(
         DateTime(timezone=True),
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
+        default=utc_now,
+        onupdate=utc_now,
         nullable=False,
     )
 
