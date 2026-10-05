@@ -239,6 +239,8 @@ tests/                      pytest suite
 | `ADMIN_SESSION_HOURS` | How long a Google sign-in lasts | `12` |
 | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`, `R2_PUBLIC_URL` | Cloudflare R2, for image uploads | bucket `yarikama-portfolio-backend` |
 | `DEBUG` | Debug mode | `False` |
+| `VERCEL_TOKEN` | Vercel access token, for the site's visitors (Web Analytics) in the admin; empty turns `/admin/visitors` off (503) | empty |
+| `VERCEL_PROJECT`, `VERCEL_TEAM` | The front end's Vercel project (name or id) and its team's slug | `portfolio`, `yarikamas-projects` |
 | `REDIS_URL` | Redis for rate limits and the job queue, e.g. `redis://:password@host:6379/0`; empty turns rate limiting off | empty |
 | `SMTP_HOST`, `SMTP_PORT` | SMTP server (STARTTLS) for contact-form notifications | `smtp.gmail.com`, `587` |
 | `SMTP_USERNAME`, `SMTP_PASSWORD`, `CONTACT_NOTIFY_TO` | Sender account (for Gmail: the address and an app password) and who gets an email per contact message; if any is empty, no email is sent | empty |
@@ -277,6 +279,7 @@ tests/                      pytest suite
 | `GET /api/v1/admin/github/contributions` | The owner's public GitHub contribution graph (`GITHUB_USER`), for the welcome page: `{"user", "total", "days": [{"date", "count", "level"}]}`, fetched at most once an hour |
 | `GET /api/v1/admin/todos?day=YYYY-MM-DD`, `POST`, `PATCH /{id}`, `DELETE /{id}` | The welcome page's to-dos: each day starts with the daily items (a NeetCode problem), anything not done carries over, and what was done shows for that day |
 | `GET`, `PUT /api/v1/admin/goal` | The owner's current goal, a few words shown large on the welcome page: `{"text"}`; empty clears it |
+| `GET /api/v1/admin/visitors?days=7` | The site's visitors over the last 1-30 days to today (UTC), from Vercel Web Analytics (production, without the owner): `{"since", "until", "pageviews", "visitors", "days": [{"date", "pageviews", "visitors"}], "pages", "referrers", "countries", "devices"}`, the last four the top ten as `[{"name", "pageviews", "visitors"}]` (an empty referrer is none). Asked at most every ten minutes; `503` without `VERCEL_TOKEN`, `502` if Vercel fails |
 | `GET /api/v1/admin/ask/questions/new`, `POST .../seen` | How many visitors asked since this admin last opened Questions (`{"count", "since"}`); opening it records the visit and returns the previous one (`{"previous"}`) |
 | `POST /api/v1/admin/complete` | Note autocomplete: `{"prefix", "title", "noteId"}` → `{"id", "suggestion"}` (empty when the model is unsure or unavailable) |
 | `POST /api/v1/admin/complete/{id}/feedback` | `{"outcome": "accepted" \| "rejected" \| "ignored", "acceptedChars"}`, recorded once per suggestion |
