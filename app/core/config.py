@@ -41,6 +41,13 @@ ADMIN_SESSION_HOURS: int = config("ADMIN_SESSION_HOURS", cast=int, default=12)
 # Whose public GitHub contribution graph the admin's welcome page shows.
 GITHUB_USER: str = config("GITHUB_USER", default="yarikama")
 
+# The site's visitors, for the admin, from Vercel Web Analytics: a Vercel
+# access token, and the front end's project (name or id) and team (slug).
+# An empty token turns it off.
+VERCEL_TOKEN: Secret = config("VERCEL_TOKEN", cast=Secret, default="")
+VERCEL_PROJECT: str = config("VERCEL_PROJECT", default="portfolio")
+VERCEL_TEAM: str = config("VERCEL_TEAM", default="yarikamas-projects")
+
 # Pages allowed to call the API from a browser (CORS), and to send the admin
 # session cookie with requests that change something.
 CORS_ORIGINS: tuple[str, ...] = (
