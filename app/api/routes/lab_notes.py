@@ -143,7 +143,7 @@ async def get_lab_notes(
     offset: int = Query(0, ge=0),
 ):
     """Public endpoint: Get only published lab notes."""
-    query = db.query(LabNote).filter(LabNote.published)
+    query = db.query(LabNote).filter(LabNote.published.is_(True))
 
     if tag:
         query = query.filter(LabNote.tags.contains([tag]))
@@ -166,7 +166,7 @@ async def get_lab_notes_tags(
         db.query(
             func.unnest(LabNote.tags).label("tag"),
         )
-        .filter(LabNote.published)
+        .filter(LabNote.published.is_(True))
         .subquery()
     )
 

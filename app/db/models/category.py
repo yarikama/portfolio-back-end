@@ -1,12 +1,16 @@
 """Category model for project categorization."""
 
+import uuid
 from datetime import datetime, timezone
-from uuid import uuid4
+from typing import TYPE_CHECKING
 
 from db.session import Base
-from sqlalchemy import Column, DateTime, Integer, String, Text, UniqueConstraint
+from sqlalchemy import DateTime, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+if TYPE_CHECKING:
+    from db.models.projects import Project
 
 
 def utc_now() -> datetime:
@@ -23,19 +27,20 @@ class Category(Base):
     # propose dropping it.
     __table_args__ = (UniqueConstraint("name", name="categories_name_key"),)
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    name = Column(String(50), unique=True, nullable=False, index=True)
-    label = Column(String(100), nullable=False)
-    description = Column(Text, nullable=True)
-    order = Column(Integer, default=0, nullable=False)
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    name: Mapped[str] = mapped_column(String(50), unique=True, index=True)
+    label: Mapped[str] = mapped_column(String(100))
+    description: Mapped[str | None] = mapped_column(Text)
+    order: Mapped[int] = mapped_column(Integer, default=0)
 
-    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
-    updated_at = Column(
-        DateTime(timezone=True),
-        default=utc_now,
-        onupdate=utc_now,
-        nullable=False,
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
     )
 
     # Relationship
-    projects = relationship("Project", back_populates="category_rel")
+    projects: Mapped[list["Project"]] = relationship(back_populates="category_rel")

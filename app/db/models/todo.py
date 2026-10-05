@@ -1,9 +1,11 @@
+import datetime as dt
 import uuid
 
 from db.session import Base
-from sqlalchemy import Boolean, Column, Date, DateTime, Index, String, Text
+from sqlalchemy import Boolean, Date, DateTime, Index, String, Text
 from sqlalchemy import text as sql
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 
 
@@ -27,13 +29,15 @@ class AdminTodo(Base):
         ),
     )
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    text = Column(Text, nullable=False)
-    href = Column(Text, nullable=True)
-    day = Column(Date, nullable=False, index=True)
-    daily_key = Column(String(32), nullable=True)
-    done_on = Column(Date, nullable=True)
-    removed = Column(Boolean, nullable=False, default=False)
-    created_at = Column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    text: Mapped[str] = mapped_column(Text)
+    href: Mapped[str | None] = mapped_column(Text)
+    day: Mapped[dt.date] = mapped_column(Date, index=True)
+    daily_key: Mapped[str | None] = mapped_column(String(32))
+    done_on: Mapped[dt.date | None] = mapped_column(Date)
+    removed: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
     )

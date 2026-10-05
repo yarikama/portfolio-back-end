@@ -1,8 +1,11 @@
 import uuid
+from datetime import datetime
+from typing import Any
 
 from db.session import Base
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 
 
@@ -16,27 +19,29 @@ class AskQuestion(Base):
 
     __tablename__ = "ask_questions"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    created_at = Column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    question = Column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), index=True
+    )
+    question: Mapped[str] = mapped_column(Text)
     # A passage the visitor highlighted, and the page it is on.
-    quote = Column(Text, nullable=True)
-    page = Column(String(200), nullable=True)
+    quote: Mapped[str | None] = mapped_column(Text)
+    page: Mapped[str | None] = mapped_column(String(200))
     # As streamed, so a broken-off answer keeps what was sent before it broke.
-    answer = Column(Text, nullable=False)
+    answer: Mapped[str] = mapped_column(Text)
     # [{"id", "kind", "title", "url"}] as sent in the done event. Ids like P3
     # change when content does; the title and url say what was meant.
-    citations = Column(JSONB, nullable=False)
+    citations: Mapped[list[dict[str, Any]]] = mapped_column(JSONB)
     # answered | error (the answer broke off).
-    status = Column(String(16), nullable=False)
+    status: Mapped[str] = mapped_column(String(16))
     # The answer hit ASK_MAX_TOKENS and ends mid-sentence.
-    truncated = Column(Boolean, nullable=False, default=False)
-    output_tokens = Column(Integer, nullable=True)
+    truncated: Mapped[bool] = mapped_column(Boolean, default=False)
+    output_tokens: Mapped[int | None] = mapped_column(Integer)
     # From the model accepting the question to the end of the answer.
-    duration_ms = Column(Integer, nullable=False)
+    duration_ms: Mapped[int] = mapped_column(Integer)
     # The owner, logged in, trying the chat; not a visitor.
-    admin = Column(Boolean, nullable=False, default=False)
+    admin: Mapped[bool] = mapped_column(Boolean, default=False)
     # good | bad, set by the owner in the admin area; null until then.
-    rating = Column(String(8), nullable=True, index=True)
+    rating: Mapped[str | None] = mapped_column(String(8), index=True)
