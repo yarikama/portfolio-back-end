@@ -5,7 +5,9 @@ admin pages and any browser that has signed in to the admin, so these are
 other people.
 
 Vercel counts production only, splits days at midnight UTC, and keeps a
-month on the Hobby plan. Each range is asked at most every ten minutes.
+month on the Hobby plan. Each range is asked at most every ten minutes. Its
+query API is slow and uneven (3 to 17 s for the six queries, measured on
+2026-10-05), so when it fails the last report for that range is kept.
 """
 
 import asyncio
@@ -14,6 +16,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
 import httpx
+from loguru import logger
 
 URL = "https://api.vercel.com/v1/query/web-analytics/visits/aggregate"
 CACHE_SECONDS = 10 * 60
@@ -123,15 +126,23 @@ async def report(
     async def ask(by: str, limit: int | None = None) -> list[dict]:
         return await _aggregate(http, vercel, by, since, until, limit)
 
-    # One row per environment, and only production is counted: the totals.
-    totals, daily, pages, referrers, countries, devices = await asyncio.gather(
-        ask("environment"),
-        ask("day"),
-        ask("requestPath", TOP),
-        ask("referrerHostname", TOP),
-        ask("country", TOP),
-        ask("deviceType", TOP),
-    )
+    try:
+        # One row per environment, and only production is counted: the totals.
+        totals, daily, pages, referrers, countries, devices = await asyncio.gather(
+            ask("environment"),
+            ask("day"),
+            ask("requestPath", TOP),
+            ask("referrerHostname", TOP),
+            ask("country", TOP),
+            ask("deviceType", TOP),
+        )
+    except VercelUnavailableError as error:
+        if not cached:
+            raise
+        logger.warning(
+            f"Vercel Web Analytics unavailable, keeping the last report: {error}"
+        )
+        return cached[1]
 
     # Days without a visit are missing from the answer; they show as zero.
     by_day = {str(row.get("timestamp", ""))[:10]: row for row in daily}

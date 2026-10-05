@@ -109,6 +109,19 @@ async def test_an_error_from_vercel_is_reported():
         await visitors.report(7, http, VERCEL, now=NOW)
 
 
+@pytest.mark.anyio
+async def test_when_vercel_fails_the_last_report_is_kept():
+    http, _ = serve()
+    first = await visitors.report(7, http, VERCEL, now=NOW)
+    # Ten minutes on, Vercel fails.
+    key = (VERCEL, 7)
+    visitors._cache[key] = (visitors._cache[key][0] - visitors.CACHE_SECONDS - 1, first)
+    failing, calls = serve(status=503)
+
+    assert await visitors.report(7, failing, VERCEL, now=NOW) == first
+    assert len(calls) == 6
+
+
 def test_the_token_is_not_in_the_repr():
     assert "token-1" not in repr(VERCEL)
 

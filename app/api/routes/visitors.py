@@ -9,7 +9,8 @@ from services import visitors
 
 router = APIRouter()
 
-TIMEOUT_SECONDS = 10
+# Vercel's query API took up to 17 s for the six queries (2026-10-05).
+TIMEOUT_SECONDS = 30
 
 
 def dump(count: visitors.Count, key: str = "name") -> dict:
