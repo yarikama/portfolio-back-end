@@ -19,11 +19,13 @@ Design and trade-offs: homelab docs/13-background-jobs.md.
 import asyncio
 import time
 from collections.abc import Awaitable, Callable
+from typing import cast
 
 from loguru import logger
 from prometheus_client import Counter, Histogram
 from redis.asyncio import Redis
 from redis.exceptions import RedisError, ResponseError
+from redis.typing import EncodableT, FieldT
 
 JOBS = Counter("jobs_total", "Jobs handled, by queue and result.", ["queue", "result"])
 DURATION = Histogram(
@@ -35,6 +37,11 @@ DURATION = Histogram(
 
 Handler = Callable[[dict[str, str]], Awaitable[None]]
 
+# A stream entry as XREADGROUP and XAUTOCLAIM return it: its id, and its
+# fields (None when the entry was trimmed from the stream while pending).
+# redis-py types every reply as a union of all commands' shapes.
+Entry = tuple[bytes | str, dict[bytes | str, bytes | str] | None]
+
 
 def dead_letter_stream(stream: str) -> str:
     return f"{stream}:dead"
@@ -42,7 +49,8 @@ def dead_letter_stream(stream: str) -> str:
 
 async def enqueue(redis: Redis, stream: str, job: dict[str, str]) -> str:
     """Add a job; returns its stream id."""
-    job_id = await redis.xadd(stream, job, maxlen=10_000, approximate=True)
+    fields: dict[FieldT, EncodableT] = {**job}
+    job_id = await redis.xadd(stream, fields, maxlen=10_000, approximate=True)
     return job_id.decode() if isinstance(job_id, bytes) else job_id
 
 
@@ -93,7 +101,7 @@ class Worker:
             if "BUSYGROUP" not in str(error):
                 raise
 
-    async def _claim_stale(self) -> list:
+    async def _claim_stale(self) -> list[Entry]:
         """Jobs another (or an earlier, crashed) worker left unacknowledged."""
         reply = await self.redis.xautoclaim(
             self.stream,
@@ -103,13 +111,13 @@ class Worker:
             start_id="0-0",
             count=10,
         )
-        return reply[1]
+        return cast(list[Entry], reply[1])
 
     async def _deliveries(self, job_id) -> int:
         pending = await self.redis.xpending_range(
             self.stream, self.group, min=job_id, max=job_id, count=1
         )
-        return pending[0]["times_delivered"] if pending else 1
+        return int(pending[0]["times_delivered"]) if pending else 1
 
     async def _handle(self, job_id, fields: dict) -> None:
         key = job_id.decode() if isinstance(job_id, bytes) else job_id
@@ -151,7 +159,9 @@ class Worker:
                 count=1,
                 block=self.block_ms,
             )
-            jobs = reply[0][1] if reply else []
+            # [[stream, entries]], one stream asked for.
+            streams = cast(list[tuple[bytes | str, list[Entry]]], reply)
+            jobs = streams[0][1] if streams else []
         for job_id, fields in jobs:
             if fields is None:  # trimmed from the stream while pending
                 await self.redis.xack(self.stream, self.group, job_id)

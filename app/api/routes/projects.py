@@ -216,7 +216,7 @@ async def get_projects(
     query = (
         db.query(Project)
         .options(joinedload(Project.category_rel))
-        .filter(Project.published)
+        .filter(Project.published.is_(True))
     )
 
     if category_id:

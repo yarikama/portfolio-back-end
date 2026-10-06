@@ -12,6 +12,12 @@ def worker(redis, handler, consumer="w1", **kwargs):
     return Worker(redis, STREAM, GROUP, consumer, handler, block_ms=10, **kwargs)
 
 
+async def pending(redis) -> int:
+    depth = await queue_depth(redis, STREAM, GROUP)
+    assert depth is not None, "the group exists"
+    return depth["pending"]
+
+
 async def test_a_job_is_handled_once_and_acknowledged(redis):
     seen = []
 
@@ -57,11 +63,11 @@ async def test_a_failed_job_stays_pending_and_is_retried(redis):
     await enqueue(redis, STREAM, {"key": "a"})
 
     await w.run_once()
-    assert (await queue_depth(redis, STREAM, GROUP))["pending"] == 1
+    assert await pending(redis) == 1
     await w.run_once()
 
     assert attempts == ["a", "a"]
-    assert (await queue_depth(redis, STREAM, GROUP))["pending"] == 0
+    assert await pending(redis) == 0
 
 
 async def test_another_worker_takes_over_a_crashed_workers_job(redis):
@@ -80,7 +86,7 @@ async def test_another_worker_takes_over_a_crashed_workers_job(redis):
     await rescuer.run_once()
 
     assert seen == ["a"]
-    assert (await queue_depth(redis, STREAM, GROUP))["pending"] == 0
+    assert await pending(redis) == 0
 
 
 async def test_a_job_that_keeps_failing_goes_to_the_dead_letter_stream(redis):
@@ -97,5 +103,5 @@ async def test_a_job_that_keeps_failing_goes_to_the_dead_letter_stream(redis):
     [(_, dead)] = await redis.xrange(dead_letter_stream(STREAM))
     assert dead[b"key"] == b"corrupt.png"
     assert b"cannot identify image file" in dead[b"error"]
-    assert (await queue_depth(redis, STREAM, GROUP))["pending"] == 0
+    assert await pending(redis) == 0
     assert await w.run_once() == 0

@@ -1,5 +1,8 @@
+from datetime import datetime
+
 from db.session import Base
-from sqlalchemy import Column, DateTime, String, Text
+from sqlalchemy import DateTime, String, Text
+from sqlalchemy.orm import Mapped, mapped_column
 
 
 class AdminSeen(Base):
@@ -11,6 +14,6 @@ class AdminSeen(Base):
 
     __tablename__ = "admin_seen"
 
-    email = Column(Text, primary_key=True)
-    page = Column(String(32), primary_key=True)
-    seen_at = Column(DateTime(timezone=True), nullable=False)
+    email: Mapped[str] = mapped_column(Text, primary_key=True)
+    page: Mapped[str] = mapped_column(String(32), primary_key=True)
+    seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

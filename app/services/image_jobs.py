@@ -4,12 +4,12 @@ found again. The worker process (worker.py) runs them.
 """
 
 import asyncio
-from typing import Protocol
+from typing import Protocol, cast
 
 from loguru import logger
 from redis.asyncio import Redis
 from services.images import WIDTHS, is_original, make_variants, variant_key
-from services.jobs import dead_letter_stream, decode, enqueue
+from services.jobs import Entry, dead_letter_stream, decode, enqueue
 
 STREAM = "jobs:images"
 GROUP = "image-workers"
@@ -52,8 +52,10 @@ def missing_variants(keys: list[str]) -> list[str]:
 
 async def given_up(redis: Redis) -> set[str]:
     """Keys whose jobs are in the dead-letter stream."""
-    entries = await redis.xrange(dead_letter_stream(STREAM))
-    return {decode(fields).get("key", "") for _, fields in entries}
+    entries = cast(list[Entry], await redis.xrange(dead_letter_stream(STREAM)))
+    return {
+        decode(fields).get("key", "") for _, fields in entries if fields is not None
+    }
 
 
 async def reconcile(storage: Storage, redis: Redis) -> int:

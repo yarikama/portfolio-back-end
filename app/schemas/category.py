@@ -3,7 +3,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class CategoryBase(BaseModel):
@@ -49,8 +49,7 @@ class CategoryResponse(CategoryBase):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class CategoryWithCount(CategoryResponse):
@@ -69,4 +68,4 @@ class CategoryReorderItem(BaseModel):
 class CategoryReorderRequest(BaseModel):
     """Schema for reordering categories."""
 
-    orders: list[CategoryReorderItem] = Field(..., min_items=1)
+    orders: list[CategoryReorderItem] = Field(..., min_length=1)

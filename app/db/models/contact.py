@@ -1,19 +1,24 @@
 import uuid
+from datetime import datetime
 
 from db.session import Base
-from sqlalchemy import Boolean, Column, DateTime, String, Text
+from sqlalchemy import Boolean, DateTime, String, Text
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 
 
 class ContactMessage(Base):
     __tablename__ = "contact_messages"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    name = Column(Text, nullable=False)
-    email = Column(String(255), nullable=False)
-    subject = Column(Text, nullable=False)
-    message = Column(Text, nullable=False)
-    read = Column(Boolean, default=False)
-    replied = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=func.now())
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    name: Mapped[str] = mapped_column(Text)
+    email: Mapped[str] = mapped_column(String(255))
+    subject: Mapped[str] = mapped_column(Text)
+    message: Mapped[str] = mapped_column(Text)
+    # Nullable in the database; new rows always get a value.
+    read: Mapped[bool | None] = mapped_column(Boolean, default=False)
+    replied: Mapped[bool | None] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, default=func.now())

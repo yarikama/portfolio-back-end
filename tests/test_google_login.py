@@ -52,6 +52,8 @@ class Google:
     def __init__(self) -> None:
         self.claims: dict = {}
         self.codes: list[tuple[str, str]] = []
+        # Set by token_endpoint from the state the sign-in kept.
+        self.nonce = ""
 
     async def exchange(self, client, code, verifier, http):
         self.codes.append((code, verifier))

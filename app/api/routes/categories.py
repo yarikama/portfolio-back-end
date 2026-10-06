@@ -161,7 +161,7 @@ async def get_categories(
     for category in categories:
         count = (
             db.query(Project)
-            .filter(Project.category_id == category.id, Project.published)
+            .filter(Project.category_id == category.id, Project.published.is_(True))
             .count()
         )
         category_dict = CategoryResponse.model_validate(category).model_dump()
@@ -169,7 +169,7 @@ async def get_categories(
         result.append(CategoryWithCount(**category_dict))
 
     # Add "All" category
-    total = db.query(Project).filter(Project.published).count()
+    total = db.query(Project).filter(Project.published.is_(True)).count()
     all_category = {
         "id": "00000000-0000-0000-0000-000000000000",  # Special UUID for "All"
         "name": "all",

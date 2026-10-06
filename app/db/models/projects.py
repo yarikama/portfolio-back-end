@@ -1,41 +1,51 @@
 import uuid
+from datetime import datetime
+from typing import TYPE_CHECKING
 
 from db.session import Base
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import ARRAY, UUID
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
+
+if TYPE_CHECKING:
+    from db.models.category import Category
 
 
 class Project(Base):
     __tablename__ = "projects"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    slug = Column(String(255), unique=True, nullable=False)
-    title = Column(String(255), nullable=False)
-    description = Column(Text, nullable=False)
-    tags = Column(ARRAY(String), nullable=False)
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    slug: Mapped[str] = mapped_column(String(255), unique=True)
+    title: Mapped[str] = mapped_column(String(255))
+    description: Mapped[str] = mapped_column(Text)
+    tags: Mapped[list[str]] = mapped_column(ARRAY(String))
 
     # Foreign key to categories table
-    category_id = Column(
-        UUID(as_uuid=True), ForeignKey("categories.id"), nullable=False
+    category_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("categories.id")
     )
 
     # Legacy field - kept for backward compatibility during migration
     # Can be removed after migration is complete
-    category = Column(String(50), nullable=True)
+    category: Mapped[str | None] = mapped_column(String(50))
 
-    year = Column(String(20), nullable=False)
-    cover_image = Column(String(500), nullable=True)
-    link = Column(String(500), nullable=True)
-    github = Column(String(500), nullable=True)
-    metrics = Column(Text, nullable=True)
-    formula = Column(Text, nullable=True)
-    featured = Column(Boolean, default=False)
-    order = Column(Integer, default=0)
-    published = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=func.now())
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    year: Mapped[str] = mapped_column(String(20))
+    cover_image: Mapped[str | None] = mapped_column(String(500))
+    link: Mapped[str | None] = mapped_column(String(500))
+    github: Mapped[str | None] = mapped_column(String(500))
+    metrics: Mapped[str | None] = mapped_column(Text)
+    formula: Mapped[str | None] = mapped_column(Text)
+    # Nullable in the database; new rows always get a value.
+    featured: Mapped[bool | None] = mapped_column(Boolean, default=False)
+    order: Mapped[int | None] = mapped_column(Integer, default=0)
+    published: Mapped[bool | None] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, default=func.now())
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime, default=func.now(), onupdate=func.now()
+    )
 
     # Relationship
-    category_rel = relationship("Category", back_populates="projects")
+    category_rel: Mapped["Category"] = relationship(back_populates="projects")

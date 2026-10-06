@@ -2,6 +2,7 @@ import asyncio
 import json
 import math
 import os
+from datetime import datetime, timezone
 
 import httpx
 import pytest
@@ -120,10 +121,11 @@ def client(session_factory, monkeypatch):
     return TestClient(app)
 
 
-def fake_model(monkeypatch, tokens=None, error=None):
+def fake_model(monkeypatch, tokens: list[tuple[str, float]] | None = None, error=None):
     async def complete(prompt, min_prob):
         if error:
             raise error
+        assert tokens is not None, "a model that answers needs tokens"
         return Completion(
             text="".join(t for t, _ in tokens), tokens=tokens, latency_ms=42
         )
@@ -389,7 +391,17 @@ def test_pending_suggestions_expire(monkeypatch):
     autocomplete._pending.clear()
     now = [1000.0]
     monkeypatch.setattr(autocomplete.time, "monotonic", lambda: now[0])
-    id = autocomplete.remember(object())
+    id = autocomplete.remember(
+        autocomplete.Pending(
+            created_at=datetime.now(timezone.utc),
+            note_id=None,
+            prompt="",
+            completion=Completion(text="", tokens=[], latency_ms=0),
+            suggestion="",
+            min_prob=0.5,
+            model_version="test",
+        )
+    )
     now[0] += autocomplete.PENDING_TTL_SECONDS + 1
     assert autocomplete.take(id) is None
 

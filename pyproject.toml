@@ -37,6 +37,7 @@ dev = [
     "ipdb>=0.13.0",
     "fakeredis[lua]>=2.30",
     "httpx2>=2.13",
+    "pyright>=1.1.414",
 ]
 
 [tool.ruff]
@@ -75,4 +76,12 @@ pythonpath = ["app"]
 testpaths = ["tests"]
 
 [tool.pyright]
+# Also what Pylance uses in the editor: a pyproject [tool.pyright] overrides
+# the editor's own python.analysis settings. CI runs `uv run pyright`.
+include = ["app", "tests"]
+exclude = ["app/alembic", "**/__pycache__"]
 extraPaths = ["app"]
+venvPath = "."
+venv = ".venv"
+pythonVersion = "3.10"
+typeCheckingMode = "standard"
