@@ -1,3 +1,5 @@
+from typing import cast
+
 from api.cache import CACHE_CONTROL, PublicCacheMiddleware, etag_for, matches
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -88,7 +90,7 @@ def test_if_none_match_parsing():
 
 
 def test_the_app_puts_the_cache_outside_cors():
-    names = [m.cls.__name__ for m in get_application().user_middleware]
+    names = [cast(type, m.cls).__name__ for m in get_application().user_middleware]
 
     # user_middleware lists the outermost first. The security headers go on
     # everything, cached copies included.

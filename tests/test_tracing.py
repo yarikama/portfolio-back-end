@@ -15,6 +15,7 @@ from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
     InMemorySpanExporter,
 )
+from sqlalchemy import create_engine
 
 
 @pytest.fixture
@@ -81,7 +82,7 @@ def test_health_probes_are_not_traced(traced):
 def test_tracing_is_off_without_an_endpoint(monkeypatch):
     monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
 
-    assert setup_tracing(FastAPI(), engine=None) is False
+    assert setup_tracing(FastAPI(), engine=create_engine("sqlite://")) is False
 
 
 def test_only_our_exporter_sends_telemetry():

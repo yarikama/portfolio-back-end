@@ -23,7 +23,10 @@ PROJECT_NAME: str = config("PROJECT_NAME", default="Portfolio-Back-End")
 # the Google accounts in ADMIN_EMAILS get in. Any of the three empty turns
 # Google sign-in off.
 GOOGLE_CLIENT_ID: str = config("GOOGLE_CLIENT_ID", default="")
-GOOGLE_CLIENT_SECRET: Secret = config("GOOGLE_CLIENT_SECRET", cast=Secret, default="")
+# Secret(config(...)) rather than cast=Secret: the same value, typed Secret.
+# (Starlette casts the default too, so default=Secret("") would wrap it twice
+# and make str() raise.)
+GOOGLE_CLIENT_SECRET: Secret = Secret(config("GOOGLE_CLIENT_SECRET", default=""))
 GOOGLE_REDIRECT_URI: str = config(
     "GOOGLE_REDIRECT_URI",
     default="https://api.yarikama.com/api/v1/auth/google/callback",
@@ -45,7 +48,7 @@ GITHUB_USER: str = config("GITHUB_USER", default="yarikama")
 # The site's visitors, for the admin, from Vercel Web Analytics: a Vercel
 # access token, and the front end's project (name or id) and team (slug).
 # An empty token turns it off.
-VERCEL_TOKEN: Secret = config("VERCEL_TOKEN", cast=Secret, default="")
+VERCEL_TOKEN: Secret = Secret(config("VERCEL_TOKEN", default=""))
 VERCEL_PROJECT: str = config("VERCEL_PROJECT", default="portfolio")
 VERCEL_TEAM: str = config("VERCEL_TEAM", default="yarikamas-projects")
 
@@ -62,14 +65,14 @@ CORS_ORIGINS: tuple[str, ...] = (
 
 # Rate limits (services.rate_limit) are kept in Redis, e.g.
 # redis://:password@host:6379/0. Empty turns them off (local development).
-REDIS_URL: Secret = config("REDIS_URL", cast=Secret, default="")
+REDIS_URL: Secret = Secret(config("REDIS_URL", default=""))
 # Email about new contact messages, over SMTP with STARTTLS (for Gmail: the
 # address and an app password). Any of user, password or recipient empty
 # turns it off; messages are still saved.
 SMTP_HOST: str = config("SMTP_HOST", default="smtp.gmail.com")
 SMTP_PORT: int = config("SMTP_PORT", cast=int, default=587)
 SMTP_USERNAME: str = config("SMTP_USERNAME", default="")
-SMTP_PASSWORD: Secret = config("SMTP_PASSWORD", cast=Secret, default="")
+SMTP_PASSWORD: Secret = Secret(config("SMTP_PASSWORD", default=""))
 CONTACT_NOTIFY_TO: str = config("CONTACT_NOTIFY_TO", default="")
 
 # Prometheus metrics on this port, separate from the API port so the public
